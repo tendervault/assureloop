@@ -16,7 +16,7 @@ BUILD_ASSERT(LOOP_ITERATIONS > 0, "loop iterations must be positive");
 
 static int64_t now_ns(void)
 {
-    return (int64_t)k_cyc_to_ns_floor64(k_cycle_get_64());
+    return (int64_t)k_ticks_to_ns_floor64(k_uptime_ticks());
 }
 
 int main(void)

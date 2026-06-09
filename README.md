@@ -79,15 +79,63 @@ The scripts use the Windows Python launcher (`py`) by default. To use another in
 
 ## Quick start: Zephyr firmware build
 
-Install Zephyr dependencies using the official Zephyr getting-started flow, then initialize this repo as a west workspace:
+AssureLoop is a west manifest repository. Keep the west top directory above the
+AssureLoop checkout so Zephyr modules are installed as siblings of this repo,
+not inside AssureLoop's own `tools/` directory.
 
-```bash
-west init -l .
+### Windows PowerShell Zephyr setup
+
+These steps follow the official Zephyr getting-started and SDK installation
+flow, with the AssureLoop manifest pinned to Zephyr v4.4.0 and Zephyr SDK
+1.0.1.
+
+```powershell
+winget install Kitware.CMake Ninja-build.Ninja oss-winget.gperf Python.Python.3.12 Git.Git oss-winget.dtc wget 7zip.7zip
+```
+
+Close and reopen PowerShell so the new tools are on `PATH`, then create the
+workspace:
+
+```powershell
+mkdir $Env:USERPROFILE\assureloop-zephyr
+cd $Env:USERPROFILE\assureloop-zephyr
+git clone https://github.com/tendervault/assureloop.git assureloop
+
+py -3.12 -m venv .venv
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+.\.venv\Scripts\Activate.ps1
+
+pip install west
+west init -l assureloop
 west update
 west zephyr-export
+python -m pip install @((west packages pip) -split ' ')
+
+cd zephyr
+west sdk install -t arm-zephyr-eabi
+
+cd ..\assureloop
 west build -b qemu_cortex_m3 firmware/app
 west build -t run
 ```
+
+The QEMU run target is interactive. Use `Ctrl+A`, then `X`, to exit after the
+demo prints `loop_summary`.
+
+Expected runtime output includes:
+
+```text
+AssureLoop controller demo booting
+release product=assureloop-controller-demo version=0.1.0-dev profile=dev git_sha=unknown
+loop_config period_ms=100 iterations=20
+loop iteration=1 ...
+loop_summary iterations=20 ...
+```
+
+Reference docs:
+
+- [Zephyr Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/)
+- [Zephyr SDK installation](https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html)
 
 To generate an SPDX SBOM after a Zephyr build:
 
