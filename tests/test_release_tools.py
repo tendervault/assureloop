@@ -85,7 +85,7 @@ class ReleaseToolsTest(unittest.TestCase):
         return fake_openssl
 
     def _make_evidence_bundle(
-        self, work: Path, *, include_sbom: bool = True
+        self, work: Path, *, include_sbom: bool = True, include_signed: bool = False
     ) -> tuple[Path, Path, Path]:
         base = work / "repo"
         zephyr_build = base / "build" / "zephyr"
@@ -93,6 +93,12 @@ class ReleaseToolsTest(unittest.TestCase):
         (zephyr_build / "zephyr.elf").write_bytes(b"fake-zephyr-elf")
 
         artifact_args = ["--artifact", "build/zephyr/zephyr.elf:firmware-elf"]
+        if include_signed:
+            (zephyr_build / "zephyr.signed.bin").write_bytes(b"fake-signed-zephyr-image")
+            artifact_args += [
+                "--artifact",
+                "build/zephyr/zephyr.signed.bin:firmware-signed-image",
+            ]
         if include_sbom:
             spdx_dir = base / "build" / "spdx"
             spdx_dir.mkdir(parents=True)
@@ -158,8 +164,8 @@ class ReleaseToolsTest(unittest.TestCase):
         )
         return base, bundle, bundle.with_suffix(".tar.gz")
 
-    def _make_update_package(self, work: Path) -> tuple[Path, Path]:
-        base, bundle, _archive = self._make_evidence_bundle(work)
+    def _make_update_package(self, work: Path, *, include_signed: bool = False) -> tuple[Path, Path]:
+        base, bundle, _archive = self._make_evidence_bundle(work, include_signed=include_signed)
         package_dir = base / "dist" / "firmware-release" / "update-package"
 
         subprocess.run(
@@ -482,6 +488,9 @@ class ReleaseToolsTest(unittest.TestCase):
             self.assertNotIn("README.md", by_name)
             self.assertNotIn("app.spdx", by_name)
             self.assertFalse((out_dir / "evidence-bundle" / "sbom").exists())
+            self.assertEqual(by_name["zephyr.map"]["kind"], "firmware-map")
+            self.assertEqual(by_name[".config"]["kind"], "firmware-config")
+            self.assertEqual(by_name["zephyr.dts"]["kind"], "firmware-devicetree")
             for filename, contents in artifacts.items():
                 self.assertIn(filename, by_name)
                 self.assertEqual(by_name[filename]["sha256"], hashlib.sha256(contents).hexdigest())
@@ -495,6 +504,58 @@ class ReleaseToolsTest(unittest.TestCase):
                 ],
                 check=True,
             )
+
+    def test_firmware_evidence_script_includes_signed_image_outputs(self) -> None:
+        powershell = self._powershell()
+        if powershell is None:
+            self.skipTest("PowerShell is not available")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            zephyr_build = work / "build-signed" / "zephyr"
+            zephyr_build.mkdir(parents=True)
+
+            artifacts = {
+                "zephyr.signed.bin": b"fake-signed-image",
+                "zephyr.elf": b"fake-zephyr-elf",
+                "zephyr.bin": b"fake-zephyr-bin",
+            }
+            for filename, contents in artifacts.items():
+                (zephyr_build / filename).write_bytes(contents)
+
+            out_dir = work / "dist" / "firmware-signed-release"
+            subprocess.run(
+                [
+                    powershell,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(REPO_ROOT / "scripts/firmware-evidence-demo.ps1"),
+                    "-Python",
+                    sys.executable,
+                    "-BuildDir",
+                    str(work / "build-signed"),
+                    "-OutputDir",
+                    str(out_dir),
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+            )
+
+            manifest_path = out_dir / "release-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            by_name = {Path(item["path"]).name: item for item in manifest["artifacts"]}
+
+            self.assertEqual(by_name["zephyr.signed.bin"]["kind"], "firmware-signed-image")
+            self.assertEqual(
+                by_name["zephyr.signed.bin"]["sha256"],
+                hashlib.sha256(artifacts["zephyr.signed.bin"]).hexdigest(),
+            )
+            bundled_signed_images = list(
+                (out_dir / "evidence-bundle" / "artifacts").rglob("zephyr.signed.bin")
+            )
+            self.assertEqual(len(bundled_signed_images), 1)
 
     def test_firmware_evidence_script_includes_generated_sbom_outputs(self) -> None:
         powershell = self._powershell()
@@ -838,6 +899,14 @@ class ReleaseToolsTest(unittest.TestCase):
             self.assertIn("signature_verification: performed", result.stdout)
             self.assertIn("result: PASS", result.stdout)
 
+    def test_create_update_package_prefers_signed_image_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp), include_signed=True)
+
+            package = json.loads((package_dir / "update-package.json").read_text(encoding="utf-8"))
+            self.assertEqual(package["payload"]["kind"], "firmware-signed-image")
+            self.assertEqual(package["payload"]["path"], "payload/zephyr.signed.bin")
+
     def test_verify_update_package_accepts_valid_package(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             _base, package_dir = self._make_update_package(Path(tmp))
@@ -865,6 +934,29 @@ class ReleaseToolsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             _base, package_dir = self._make_update_package(Path(tmp))
             package = json.loads((package_dir / "update-package.json").read_text(encoding="utf-8"))
+            (package_dir / package["payload"]["path"]).write_bytes(b"tampered")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_update_package.py"),
+                    "--package",
+                    str(package_dir),
+                    "--schema",
+                    str(REPO_ROOT / "schemas/release-manifest.schema.json"),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("payload hash mismatch", result.stderr)
+
+    def test_verify_update_package_tampered_signed_payload_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp), include_signed=True)
+            package = json.loads((package_dir / "update-package.json").read_text(encoding="utf-8"))
+            self.assertEqual(package["payload"]["kind"], "firmware-signed-image")
             (package_dir / package["payload"]["path"]).write_bytes(b"tampered")
 
             result = subprocess.run(
@@ -979,6 +1071,7 @@ class ReleaseToolsTest(unittest.TestCase):
                 "git",
                 "check-ignore",
                 "keys/dev-rsa-private.pem",
+                "keys/mcuboot-dev-rsa-2048.pem",
                 "dist/firmware-release/release-manifest.sig",
             ],
             cwd=REPO_ROOT,
@@ -988,6 +1081,7 @@ class ReleaseToolsTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("keys/dev-rsa-private.pem", result.stdout)
+        self.assertIn("keys/mcuboot-dev-rsa-2048.pem", result.stdout)
         self.assertIn("dist/firmware-release/release-manifest.sig", result.stdout)
 
 

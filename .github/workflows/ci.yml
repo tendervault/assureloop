@@ -67,6 +67,10 @@ jobs:
         working-directory: assureloop
         run: bash scripts/update-package-demo.sh
 
+      - name: Build and verify signed simulator image
+        working-directory: assureloop
+        run: bash scripts/signed-image-demo.sh
+
       - name: Check firmware evidence outputs
         working-directory: assureloop
         run: |
@@ -77,6 +81,10 @@ jobs:
           test -d dist/firmware-release/evidence-bundle/sbom
           test -f dist/firmware-release/update-package/update-package.json
           test -f dist/firmware-release/update-package/evidence-bundle.tar.gz
+          test -f build-signed/zephyr/zephyr.signed.bin
+          test -f dist/firmware-signed-release/release-manifest.json
+          test -f dist/firmware-signed-release/evidence-bundle.tar.gz
+          test -f dist/firmware-signed-release/update-package/update-package.json
 
       - name: Upload firmware evidence bundle
         uses: actions/upload-artifact@v4
@@ -88,4 +96,9 @@ jobs:
             assureloop/dist/firmware-release/evidence-bundle/**
             assureloop/dist/firmware-release/evidence-bundle.tar.gz
             assureloop/dist/firmware-release/update-package/**
+            assureloop/dist/firmware-signed-release/release-manifest.json
+            assureloop/dist/firmware-signed-release/trace-report.json
+            assureloop/dist/firmware-signed-release/evidence-bundle/**
+            assureloop/dist/firmware-signed-release/evidence-bundle.tar.gz
+            assureloop/dist/firmware-signed-release/update-package/**
           if-no-files-found: error

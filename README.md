@@ -27,6 +27,7 @@ workflow checks:
 - release manifest verification with `python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .`
 - end-to-end evidence bundle verification with `scripts/verify-firmware-evidence.sh`
 - simulator-first firmware update package creation and verification
+- MCUboot-compatible signed simulator image creation and signed-payload update package verification
 - upload of the generated firmware evidence bundle and update package as a GitHub Actions artifact
 
 CI does not use private signing keys and does not commit generated `build/` or
@@ -363,6 +364,70 @@ is supplied.
 This is a simulator-first packaging and safety-check workflow only. It is not
 real OTA transport, not an MCUboot image format, not production signing, and
 not a certification claim.
+
+## Signed Firmware Image Demo
+
+The signed image demo produces a qemu-compatible firmware image signed with
+Zephyr's MCUboot/imgtool signing support:
+
+```powershell
+.\scripts\signed-image-demo.ps1
+```
+
+Bash:
+
+```bash
+bash scripts/signed-image-demo.sh
+```
+
+The script creates or reuses an ignored local development key:
+
+```text
+keys/mcuboot-dev-rsa-2048.pem
+```
+
+That key is generated with MCUboot `imgtool keygen`, is used only for local
+development, and must not be committed or treated as a production signing
+identity.
+
+The demo keeps `qemu_cortex_m3` as the simulator target, but does not build or
+run the MCUboot bootloader under qemu yet. Investigation showed the upstream
+`qemu_cortex_m3` board exposes `soc-nv-flash` but does not enable a Zephyr flash
+driver satisfying MCUboot's `FLASH_MAP` dependency, so a full qemu MCUboot
+sysbuild bootloader run would require board/flash work outside this milestone.
+Instead, the demo builds the app with:
+
+```text
+CONFIG_BOOTLOADER_MCUBOOT=y
+CONFIG_BUILD_OUTPUT_BIN=y
+CONFIG_MCUBOOT_SIGNATURE_KEY_FILE=<local dev key>
+```
+
+and applies the simulator-only partition overlay:
+
+```text
+firmware/app/overlays/qemu_cortex_m3_mcuboot.overlay
+```
+
+Outputs include:
+
+```text
+build-signed/zephyr/zephyr.signed.bin
+dist/firmware-signed-release/release-manifest.json
+dist/firmware-signed-release/evidence-bundle/
+dist/firmware-signed-release/evidence-bundle.tar.gz
+dist/firmware-signed-release/update-package/
+```
+
+The script verifies `zephyr.signed.bin` with `imgtool verify`, records it in the
+release manifest as `firmware-signed-image`, includes it in the evidence bundle,
+and creates an update package whose payload is `payload/zephyr.signed.bin`.
+
+This is MCUboot-compatible image-signing groundwork only. It is not real OTA
+transport, not a production secure boot deployment, not a hardware board port,
+and not a safety or cybersecurity certification claim. The next OTA step is to
+add an update acceptance flow that consumes the signed payload, then move to a
+target with a verified MCUboot flash map and bootloader runtime path.
 
 ## Release workflow target
 

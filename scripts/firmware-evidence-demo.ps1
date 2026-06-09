@@ -132,11 +132,15 @@ try {
     $BundleIncludeArgs = @()
     $FoundFirmwareImage = $false
     $Candidates = @(
+        @{ Name = "zephyr.signed.bin"; Kind = "firmware-signed-image"; Firmware = $true },
+        @{ Name = "zephyr.signed.hex"; Kind = "firmware-signed-image"; Firmware = $true },
+        @{ Name = "zephyr.signed.confirmed.bin"; Kind = "firmware-signed-image"; Firmware = $true },
+        @{ Name = "zephyr.signed.confirmed.hex"; Kind = "firmware-signed-image"; Firmware = $true },
         @{ Name = "zephyr.elf"; Kind = "firmware-elf"; Firmware = $true },
         @{ Name = "zephyr.bin"; Kind = "firmware-bin"; Firmware = $true },
-        @{ Name = "zephyr.map"; Kind = "linker-map"; Firmware = $false },
-        @{ Name = ".config"; Kind = "build-config"; Firmware = $false },
-        @{ Name = "zephyr.dts"; Kind = "devicetree"; Firmware = $false }
+        @{ Name = "zephyr.map"; Kind = "firmware-map"; Firmware = $false },
+        @{ Name = ".config"; Kind = "firmware-config"; Firmware = $false },
+        @{ Name = "zephyr.dts"; Kind = "firmware-devicetree"; Firmware = $false }
     )
 
     foreach ($Candidate in $Candidates) {

@@ -69,11 +69,15 @@ include_artifact() {
   fi
 }
 
+include_artifact "zephyr.signed.bin" "firmware-signed-image" "true"
+include_artifact "zephyr.signed.hex" "firmware-signed-image" "true"
+include_artifact "zephyr.signed.confirmed.bin" "firmware-signed-image" "true"
+include_artifact "zephyr.signed.confirmed.hex" "firmware-signed-image" "true"
 include_artifact "zephyr.elf" "firmware-elf" "true"
 include_artifact "zephyr.bin" "firmware-bin" "true"
-include_artifact "zephyr.map" "linker-map" "false"
-include_artifact ".config" "build-config" "false"
-include_artifact "zephyr.dts" "devicetree" "false"
+include_artifact "zephyr.map" "firmware-map" "false"
+include_artifact ".config" "firmware-config" "false"
+include_artifact "zephyr.dts" "firmware-devicetree" "false"
 
 if ((${#artifact_args[@]} == 0)); then
   echo "No Zephyr build artifacts found in ${zephyr_build}." >&2

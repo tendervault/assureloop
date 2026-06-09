@@ -18,7 +18,12 @@ from verify_evidence_bundle import load_bundle_root
 
 
 DEFAULT_OUTPUT_DIR = Path("dist/firmware-release/update-package")
-PREFERRED_FIRMWARE_KINDS = ["firmware-bin", "firmware-elf", "firmware"]
+PREFERRED_FIRMWARE_KINDS = [
+    "firmware-signed-image",
+    "firmware-bin",
+    "firmware-elf",
+    "firmware",
+]
 
 
 def sha256_file(path: Path) -> str:
