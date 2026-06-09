@@ -146,9 +146,9 @@ west build -b qemu_cortex_m3 firmware/app
 .\scripts\firmware-evidence-demo.ps1
 ```
 
-The firmware evidence demo packages available Zephyr build outputs from
-`build/zephyr`, including `zephyr.elf`, `zephyr.bin`, `zephyr.map`, `.config`,
-and `zephyr.dts` when present. It uses
+This default firmware evidence demo does not generate an SBOM. It packages
+available Zephyr build outputs from `build/zephyr`, including `zephyr.elf`,
+`zephyr.bin`, `zephyr.map`, `.config`, and `zephyr.dts` when present. It uses
 `samples/logs/qemu_controller_boot.log` as the QEMU trace sample and writes:
 
 ```text
@@ -162,7 +162,39 @@ dist/firmware-release/
 The manifest records SHA256 hashes for the collected firmware build artifacts.
 This is simulator evidence for development review, not a certification package.
 
-To generate an SPDX SBOM after a Zephyr build:
+To include Zephyr SPDX SBOM output in the same release evidence:
+
+```powershell
+west build -b qemu_cortex_m3 firmware/app
+.\scripts\firmware-evidence-demo.ps1 -GenerateSbom
+```
+
+With `-GenerateSbom`, the script runs `west spdx --build-dir build` against the
+existing build directory. Zephyr writes generated SPDX files under:
+
+```text
+build/spdx/
+├── app.spdx
+├── zephyr.spdx
+├── build.spdx
+└── modules-deps.spdx
+```
+
+Those files are added to `release-manifest.json` as `sbom` artifacts and copied
+into `dist/firmware-release/evidence-bundle/sbom/`.
+
+Troubleshooting `west spdx`:
+
+- Run `west build -b qemu_cortex_m3 firmware/app` first.
+- Make sure `west`, CMake, Ninja, Zephyr Python packages, and Zephyr SDK 1.0.1
+  are available in the active PowerShell environment.
+- If `west spdx` reports a missing CMake API reply directory, rerun
+  `.\scripts\firmware-evidence-demo.ps1 -GenerateSbom`; the script initializes
+  SPDX metadata and refreshes the existing build before generating SPDX output.
+- Generated SBOM, build, and release output stays under ignored `build/` and
+  `dist/` directories.
+
+To generate an SPDX SBOM manually after a Zephyr build:
 
 ```bash
 west spdx --init -d build

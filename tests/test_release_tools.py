@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -135,6 +136,10 @@ class ReleaseToolsTest(unittest.TestCase):
             for filename, contents in artifacts.items():
                 (zephyr_build / filename).write_bytes(contents)
 
+            spdx_dir = work / "build" / "spdx"
+            spdx_dir.mkdir()
+            (spdx_dir / "app.spdx").write_bytes(b"existing-spdx-not-requested")
+
             out_dir = work / "dist" / "firmware-release"
             subprocess.run(
                 [
@@ -166,9 +171,79 @@ class ReleaseToolsTest(unittest.TestCase):
             by_name = {Path(item["path"]).name: item for item in manifest["artifacts"]}
             self.assertEqual(manifest["target"], "qemu_cortex_m3")
             self.assertNotIn("README.md", by_name)
+            self.assertNotIn("app.spdx", by_name)
+            self.assertFalse((out_dir / "evidence-bundle" / "sbom").exists())
             for filename, contents in artifacts.items():
                 self.assertIn(filename, by_name)
                 self.assertEqual(by_name[filename]["sha256"], hashlib.sha256(contents).hexdigest())
+
+    def test_firmware_evidence_script_includes_generated_sbom_outputs(self) -> None:
+        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        if powershell is None or os.name != "nt":
+            self.skipTest("PowerShell on Windows is required for the fake west command")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            zephyr_build = work / "build" / "zephyr"
+            zephyr_build.mkdir(parents=True)
+            (zephyr_build / "zephyr.elf").write_bytes(b"fake-zephyr-elf")
+
+            spdx_dir = work / "build" / "spdx"
+            spdx_dir.mkdir()
+            sbom_artifacts = {
+                "app.spdx": b"SPDXVersion: SPDX-2.3\nDocumentName: app\n",
+                "modules-deps.spdx": b"SPDXVersion: SPDX-2.3\nDocumentName: modules\n",
+            }
+            for filename, contents in sbom_artifacts.items():
+                (spdx_dir / filename).write_bytes(contents)
+
+            fake_west = work / "west.cmd"
+            fake_west.write_text("@echo off\r\necho fake west %*\r\nexit /b 0\r\n", encoding="utf-8")
+
+            out_dir = work / "dist" / "firmware-release"
+            subprocess.run(
+                [
+                    powershell,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(REPO_ROOT / "scripts/firmware-evidence-demo.ps1"),
+                    "-Python",
+                    sys.executable,
+                    "-West",
+                    str(fake_west),
+                    "-BuildDir",
+                    str(work / "build"),
+                    "-OutputDir",
+                    str(out_dir),
+                    "-GenerateSbom",
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+            )
+
+            manifest_path = out_dir / "release-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            by_name = {Path(item["path"]).name: item for item in manifest["artifacts"]}
+            self.assertIn("zephyr.elf", by_name)
+            for filename, contents in sbom_artifacts.items():
+                self.assertIn(filename, by_name)
+                self.assertEqual(by_name[filename]["kind"], "sbom")
+                self.assertEqual(by_name[filename]["sha256"], hashlib.sha256(contents).hexdigest())
+                self.assertTrue((out_dir / "evidence-bundle" / "sbom" / filename).exists())
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_release.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--base-dir",
+                    str(REPO_ROOT),
+                ],
+                check=True,
+            )
 
 
 if __name__ == "__main__":
