@@ -58,6 +58,25 @@ python3 tools/build_evidence_bundle.py \
   --output-dir dist/evidence-bundle
 ```
 
+## Windows PowerShell developer commands
+
+Windows host-side validation does not require GNU make. From PowerShell, run:
+
+```powershell
+.\scripts\test-tools.ps1
+.\scripts\evidence-demo.ps1
+.\scripts\verify-demo.ps1
+.\scripts\clean.ps1
+```
+
+The scripts use the Windows Python launcher (`py`) by default. To use another interpreter, pass `-Python`, for example:
+
+```powershell
+.\scripts\test-tools.ps1 -Python python
+```
+
+`.\scripts\evidence-demo.ps1` writes the demo manifest, trace report, evidence bundle directory, and `dist/evidence-bundle.tar.gz`. `.\scripts\verify-demo.ps1` also requires OpenSSL because it creates development keys and verifies a manifest signature; pass `-OpenSsl C:\path\to\openssl.exe` if OpenSSL is not on `PATH`.
+
 ## Quick start: Zephyr firmware build
 
 Install Zephyr dependencies using the official Zephyr getting-started flow, then initialize this repo as a west workspace:
