@@ -2,9 +2,8 @@
 
 [CmdletBinding()]
 param(
-    [string] $Python = $(if ($env:PYTHON) { $env:PYTHON } else { "py" }),
     [string] $OpenSsl = $(if ($env:OPENSSL) { $env:OPENSSL } else { "openssl" }),
-    [string] $Dist = $(if ($env:DIST) { $env:DIST } else { "dist" })
+    [string] $KeysDir = $(if ($env:ASSURELOOP_KEYS_DIR) { $env:ASSURELOOP_KEYS_DIR } else { "keys" })
 )
 
 Set-StrictMode -Version Latest
@@ -52,22 +51,17 @@ try {
     $OpenSslDir = Split-Path -Parent $OpenSslPath
     $env:PATH = "$OpenSslDir;$OriginalPath"
 
-    New-Item -ItemType Directory -Force -Path $Dist | Out-Null
-    New-Item -ItemType Directory -Force -Path "keys" | Out-Null
+    $KeysRoot = if ([System.IO.Path]::IsPathRooted($KeysDir)) {
+        [System.IO.Path]::GetFullPath($KeysDir)
+    }
+    else {
+        [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $KeysDir))
+    }
 
-    $Manifest = Join-Path $Dist "release-manifest.json"
-    $Signature = "$Manifest.sig"
-    $PrivateKey = Join-Path "keys" "dev-rsa-private.pem"
-    $PublicKey = Join-Path "keys" "dev-rsa-public.pem"
+    New-Item -ItemType Directory -Force -Path $KeysRoot | Out-Null
 
-    Invoke-Checked -FilePath $Python -Arguments @(
-        "tools/generate_release_manifest.py",
-        "--product", "assureloop-controller-demo",
-        "--version", "0.1.0-dev",
-        "--target", "host-demo",
-        "--artifact", "README.md:doc",
-        "--output", $Manifest
-    )
+    $PrivateKey = Join-Path $KeysRoot "dev-rsa-private.pem"
+    $PublicKey = Join-Path $KeysRoot "dev-rsa-public.pem"
 
     if (-not (Test-Path -LiteralPath $PrivateKey -PathType Leaf)) {
         Invoke-Checked -FilePath $OpenSslPath -Arguments @(
@@ -87,23 +81,6 @@ try {
 
     Write-Host "created $PrivateKey and $PublicKey"
     Write-Host "development keys only; do not use for production"
-
-    Invoke-Checked -FilePath $Python -Arguments @(
-        "tools/sign_release.py",
-        "--manifest", $Manifest,
-        "--private-key", $PrivateKey,
-        "--signature", $Signature,
-        "--openssl", $OpenSslPath
-    )
-
-    Invoke-Checked -FilePath $Python -Arguments @(
-        "tools/verify_release.py",
-        "--manifest", $Manifest,
-        "--base-dir", ".",
-        "--signature", $Signature,
-        "--public-key", $PublicKey,
-        "--openssl", $OpenSslPath
-    )
 }
 finally {
     $env:PATH = $OriginalPath

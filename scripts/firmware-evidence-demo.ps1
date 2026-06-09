@@ -4,19 +4,23 @@
 param(
     [string] $Python = $(if ($env:PYTHON) { $env:PYTHON } else { "py" }),
     [string] $West = $(if ($env:WEST) { $env:WEST } else { "west" }),
+    [string] $OpenSsl = $(if ($env:OPENSSL) { $env:OPENSSL } else { "openssl" }),
+    [string] $KeysDir = $(if ($env:ASSURELOOP_KEYS_DIR) { $env:ASSURELOOP_KEYS_DIR } else { "keys" }),
     [string] $BuildDir = $(if ($env:BUILD_DIR) { $env:BUILD_DIR } else { "build" }),
     [string] $OutputDir = $(if ($env:FIRMWARE_RELEASE_DIR) { $env:FIRMWARE_RELEASE_DIR } else { "dist/firmware-release" }),
     [string] $Product = $(if ($env:ASSURELOOP_PRODUCT) { $env:ASSURELOOP_PRODUCT } else { "assureloop-controller-demo" }),
     [string] $Version = $(if ($env:ASSURELOOP_VERSION) { $env:ASSURELOOP_VERSION } else { "0.1.0-dev" }),
     [string] $Target = $(if ($env:ASSURELOOP_TARGET) { $env:ASSURELOOP_TARGET } else { "qemu_cortex_m3" }),
     [string] $BuildProfile = $(if ($env:ASSURELOOP_BUILD_PROFILE) { $env:ASSURELOOP_BUILD_PROFILE } else { "dev" }),
-    [switch] $GenerateSbom
+    [switch] $GenerateSbom,
+    [switch] $Sign
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$OriginalPath = $env:PATH
 $TrimChars = [char[]] @(
     [System.IO.Path]::DirectorySeparatorChar,
     [System.IO.Path]::AltDirectorySeparatorChar
@@ -54,6 +58,24 @@ function Convert-ToManifestPath {
     return $Full
 }
 
+function Resolve-OpenSsl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Command
+    )
+
+    if (Test-Path -LiteralPath $Command -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $Command).Path
+    }
+
+    try {
+        return (Get-Command $Command -CommandType Application -ErrorAction Stop).Source
+    }
+    catch {
+        throw "OpenSSL was not found. Install OpenSSL, add it to PATH, or pass -OpenSsl with the full path to openssl.exe."
+    }
+}
+
 function Find-SbomFiles {
     param(
         [Parameter(Mandatory = $true)]
@@ -80,6 +102,13 @@ function Find-SbomFiles {
 
 Push-Location -LiteralPath $RepoRoot
 try {
+    $OpenSslPath = $null
+    if ($Sign) {
+        $OpenSslPath = Resolve-OpenSsl -Command $OpenSsl
+        $OpenSslDir = Split-Path -Parent $OpenSslPath
+        $env:PATH = "$OpenSslDir;$OriginalPath"
+    }
+
     $BuildRoot = if ([System.IO.Path]::IsPathRooted($BuildDir)) {
         [System.IO.Path]::GetFullPath($BuildDir)
     }
@@ -162,6 +191,7 @@ try {
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
     $Manifest = Join-Path $OutputDir "release-manifest.json"
+    $Signature = Join-Path $OutputDir "release-manifest.sig"
     $TraceReport = Join-Path $OutputDir "trace-report.json"
     $EvidenceBundle = Join-Path $OutputDir "evidence-bundle"
     $EvidenceArchive = "$EvidenceBundle.tar.gz"
@@ -169,6 +199,10 @@ try {
 
     if (-not (Test-Path -LiteralPath $TraceLog -PathType Leaf)) {
         throw "QEMU trace sample not found: $TraceLog"
+    }
+
+    if (-not $Sign) {
+        Remove-Item -LiteralPath $Signature -Force -ErrorAction SilentlyContinue
     }
 
     $ManifestArgs = @(
@@ -183,6 +217,34 @@ try {
     $ManifestArgs += @("--output", $Manifest)
 
     Invoke-Checked -FilePath $Python -Arguments $ManifestArgs
+
+    if ($Sign) {
+        $PrivateKey = Join-Path $KeysDir "dev-rsa-private.pem"
+        $PublicKey = Join-Path $KeysDir "dev-rsa-public.pem"
+        $KeyScript = Join-Path $PSScriptRoot "create_dev_keys.ps1"
+
+        & $KeyScript -OpenSsl $OpenSslPath -KeysDir $KeysDir
+
+        Invoke-Checked -FilePath $Python -Arguments @(
+            "tools/sign_release.py",
+            "--manifest", $Manifest,
+            "--private-key", $PrivateKey,
+            "--signature", $Signature,
+            "--openssl", $OpenSslPath
+        )
+
+        Invoke-Checked -FilePath $Python -Arguments @(
+            "tools/verify_release.py",
+            "--manifest", $Manifest,
+            "--base-dir", ".",
+            "--signature", $Signature,
+            "--public-key", $PublicKey,
+            "--openssl", $OpenSslPath
+        )
+
+        $BundleIncludeArgs += @("--include-file", $Signature, "release-manifest.sig")
+        $BundleIncludeArgs += @("--include-file", $PublicKey, "signing/dev-rsa-public.pem")
+    }
 
     Invoke-Checked -FilePath $Python -Arguments @(
         "tools/generate_trace_report.py",
@@ -205,5 +267,6 @@ try {
     Invoke-Checked -FilePath $Python -Arguments $BundleArgs
 }
 finally {
+    $env:PATH = $OriginalPath
     Pop-Location
 }

@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -49,10 +50,12 @@ def verify_artifacts(manifest: dict[str, object], base_dir: Path) -> list[str]:
     return errors
 
 
-def verify_signature(manifest_path: Path, signature: Path, public_key: Path) -> bool:
+def verify_signature(
+    manifest_path: Path, signature: Path, public_key: Path, openssl: str
+) -> bool:
     result = subprocess.run(
         [
-            "openssl",
+            openssl,
             "dgst",
             "-sha256",
             "-verify",
@@ -79,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-dir", type=Path, default=Path.cwd())
     parser.add_argument("--signature", type=Path)
     parser.add_argument("--public-key", type=Path)
+    parser.add_argument("--openssl", default=os.environ.get("OPENSSL", "openssl"))
     args = parser.parse_args(argv)
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -87,7 +91,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.signature or args.public_key:
         if not args.signature or not args.public_key:
             errors.append("--signature and --public-key must be supplied together")
-        elif not verify_signature(args.manifest, args.signature, args.public_key):
+        elif not verify_signature(
+            args.manifest, args.signature, args.public_key, str(args.openssl)
+        ):
             errors.append("signature verification failed")
 
     if errors:

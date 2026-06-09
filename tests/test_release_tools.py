@@ -16,6 +16,66 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseToolsTest(unittest.TestCase):
+    def _powershell(self) -> str | None:
+        return shutil.which("powershell") or shutil.which("pwsh")
+
+    def _write_fake_openssl(self, work: Path) -> Path:
+        fake_impl = work / "fake_openssl.py"
+        fake_impl.write_text(
+            "\n".join(
+                [
+                    "from pathlib import Path",
+                    "import sys",
+                    "",
+                    "args = sys.argv[1:]",
+                    "",
+                    "def value_after(flag):",
+                    "    if flag not in args:",
+                    "        return None",
+                    "    index = args.index(flag)",
+                    "    if index + 1 >= len(args):",
+                    "        return None",
+                    "    return args[index + 1]",
+                    "",
+                    "if not args:",
+                    "    sys.exit(1)",
+                    "",
+                    "command = args[0]",
+                    "if command == 'genpkey':",
+                    "    out = value_after('-out')",
+                    "    if out is None:",
+                    "        sys.exit(2)",
+                    "    Path(out).write_text('FAKE PRIVATE KEY\\n', encoding='utf-8')",
+                    "    sys.exit(0)",
+                    "if command == 'rsa':",
+                    "    out = value_after('-out')",
+                    "    if out is None:",
+                    "        sys.exit(2)",
+                    "    Path(out).write_text('FAKE PUBLIC KEY\\n', encoding='utf-8')",
+                    "    sys.exit(0)",
+                    "if command == 'dgst' and '-verify' in args:",
+                    "    print('Verified OK')",
+                    "    sys.exit(0)",
+                    "if command == 'dgst':",
+                    "    out = value_after('-out')",
+                    "    if out is None:",
+                    "        sys.exit(2)",
+                    "    Path(out).write_bytes(b'fake-signature')",
+                    "    sys.exit(0)",
+                    "",
+                    "sys.exit(3)",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        fake_openssl = work / "openssl.cmd"
+        fake_openssl.write_text(
+            f'@echo off\r\n"{sys.executable}" "%~dp0fake_openssl.py" %*\r\n',
+            encoding="utf-8",
+        )
+        return fake_openssl
+
     def test_manifest_and_verify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
@@ -118,7 +178,7 @@ class ReleaseToolsTest(unittest.TestCase):
             self.assertIn("loop_summary", data["summary_line"])
 
     def test_firmware_evidence_script_with_sample_build_outputs(self) -> None:
-        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        powershell = self._powershell()
         if powershell is None:
             self.skipTest("PowerShell is not available")
 
@@ -178,7 +238,7 @@ class ReleaseToolsTest(unittest.TestCase):
                 self.assertEqual(by_name[filename]["sha256"], hashlib.sha256(contents).hexdigest())
 
     def test_firmware_evidence_script_includes_generated_sbom_outputs(self) -> None:
-        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        powershell = self._powershell()
         if powershell is None or os.name != "nt":
             self.skipTest("PowerShell on Windows is required for the fake west command")
 
@@ -244,6 +304,129 @@ class ReleaseToolsTest(unittest.TestCase):
                 ],
                 check=True,
             )
+
+    def test_firmware_evidence_script_signs_manifest_with_dev_key(self) -> None:
+        powershell = self._powershell()
+        if powershell is None or os.name != "nt":
+            self.skipTest("PowerShell on Windows is required for the fake OpenSSL command")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            zephyr_build = work / "build" / "zephyr"
+            zephyr_build.mkdir(parents=True)
+            (zephyr_build / "zephyr.elf").write_bytes(b"fake-zephyr-elf")
+
+            fake_openssl = self._write_fake_openssl(work)
+            out_dir = work / "dist" / "firmware-release"
+            keys_dir = work / "keys"
+
+            subprocess.run(
+                [
+                    powershell,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(REPO_ROOT / "scripts/firmware-evidence-demo.ps1"),
+                    "-Python",
+                    sys.executable,
+                    "-OpenSsl",
+                    str(fake_openssl),
+                    "-KeysDir",
+                    str(keys_dir),
+                    "-BuildDir",
+                    str(work / "build"),
+                    "-OutputDir",
+                    str(out_dir),
+                    "-Sign",
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+            )
+
+            manifest_path = out_dir / "release-manifest.json"
+            signature_path = out_dir / "release-manifest.sig"
+            self.assertTrue(manifest_path.exists())
+            self.assertTrue(signature_path.exists())
+            self.assertTrue((keys_dir / "dev-rsa-private.pem").exists())
+            self.assertTrue((keys_dir / "dev-rsa-public.pem").exists())
+            self.assertTrue(
+                (out_dir / "evidence-bundle" / "release-manifest.sig").exists()
+            )
+            self.assertTrue(
+                (out_dir / "evidence-bundle" / "signing" / "dev-rsa-public.pem").exists()
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_release.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--base-dir",
+                    str(REPO_ROOT),
+                ],
+                check=True,
+            )
+
+    def test_firmware_evidence_sign_missing_openssl_fails_clearly(self) -> None:
+        powershell = self._powershell()
+        if powershell is None:
+            self.skipTest("PowerShell is not available")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            zephyr_build = work / "build" / "zephyr"
+            zephyr_build.mkdir(parents=True)
+            (zephyr_build / "zephyr.elf").write_bytes(b"fake-zephyr-elf")
+
+            result = subprocess.run(
+                [
+                    powershell,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(REPO_ROOT / "scripts/firmware-evidence-demo.ps1"),
+                    "-Python",
+                    sys.executable,
+                    "-OpenSsl",
+                    str(work / "missing-openssl.exe"),
+                    "-KeysDir",
+                    str(work / "keys"),
+                    "-BuildDir",
+                    str(work / "build"),
+                    "-OutputDir",
+                    str(work / "dist" / "firmware-release"),
+                    "-Sign",
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("OpenSSL was not found", result.stdout + result.stderr)
+
+    def test_private_keys_and_signatures_are_git_ignored(self) -> None:
+        if shutil.which("git") is None:
+            self.skipTest("git is not available")
+
+        result = subprocess.run(
+            [
+                "git",
+                "check-ignore",
+                "keys/dev-rsa-private.pem",
+                "dist/firmware-release/release-manifest.sig",
+            ],
+            cwd=REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("keys/dev-rsa-private.pem", result.stdout)
+        self.assertIn("dist/firmware-release/release-manifest.sig", result.stdout)
 
 
 if __name__ == "__main__":

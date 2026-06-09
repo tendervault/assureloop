@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--private-key", type=Path, required=True)
     parser.add_argument("--signature", type=Path, required=True)
+    parser.add_argument("--openssl", default=os.environ.get("OPENSSL", "openssl"))
     args = parser.parse_args(argv)
 
     if not args.manifest.exists():
@@ -25,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     args.signature.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [
-            "openssl",
+            str(args.openssl),
             "dgst",
             "-sha256",
             "-sign",

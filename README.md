@@ -183,6 +183,29 @@ build/spdx/
 Those files are added to `release-manifest.json` as `sbom` artifacts and copied
 into `dist/firmware-release/evidence-bundle/sbom/`.
 
+To include Zephyr SPDX SBOM output and sign the release manifest with a local
+development key:
+
+```powershell
+west build -b qemu_cortex_m3 firmware/app
+.\scripts\firmware-evidence-demo.ps1 -GenerateSbom -Sign -OpenSsl 'C:\Program Files\Git\usr\bin\openssl.exe'
+```
+
+With `-Sign`, the script creates or reuses local development RSA keys under the
+ignored `keys/` directory, signs `dist/firmware-release/release-manifest.json`,
+writes `dist/firmware-release/release-manifest.sig`, and verifies the signature
+before completing. The public development key is copied into the evidence bundle
+under `signing/dev-rsa-public.pem`; the private key stays under `keys/` and must
+not be committed. This development signature only detects manifest changes after
+signing with that local key. It is not a production identity, secure key custody
+model, OTA update signature, MCUboot integration, or certification claim.
+
+To verify a signed firmware release manually:
+
+```powershell
+py tools\verify_release.py --manifest dist\firmware-release\release-manifest.json --base-dir . --signature dist\firmware-release\release-manifest.sig --public-key keys\dev-rsa-public.pem
+```
+
 Troubleshooting `west spdx`:
 
 - Run `west build -b qemu_cortex_m3 firmware/app` first.
@@ -191,8 +214,12 @@ Troubleshooting `west spdx`:
 - If `west spdx` reports a missing CMake API reply directory, rerun
   `.\scripts\firmware-evidence-demo.ps1 -GenerateSbom`; the script initializes
   SPDX metadata and refreshes the existing build before generating SPDX output.
+- If signing fails with `OpenSSL was not found`, install OpenSSL, add it to
+  `PATH`, or pass `-OpenSsl` with the full path to `openssl.exe`. Git for
+  Windows commonly provides OpenSSL at
+  `C:\Program Files\Git\usr\bin\openssl.exe`.
 - Generated SBOM, build, and release output stays under ignored `build/` and
-  `dist/` directories.
+  `dist/` directories. Development private keys stay under ignored `keys/`.
 
 To generate an SPDX SBOM manually after a Zephyr build:
 
@@ -218,7 +245,7 @@ dist/
 │   ├── build.spdx
 │   └── modules-deps.spdx
 ├── release-manifest.json
-├── release-manifest.json.sig
+├── release-manifest.sig
 ├── trace-report.json
 └── evidence-bundle/
 ```
