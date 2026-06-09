@@ -26,7 +26,8 @@ workflow checks:
 - release manifest schema validation with `python tools/validate_manifest.py --manifest dist/firmware-release/release-manifest.json`
 - release manifest verification with `python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .`
 - end-to-end evidence bundle verification with `scripts/verify-firmware-evidence.sh`
-- upload of the generated firmware evidence bundle as a GitHub Actions artifact
+- simulator-first firmware update package creation and verification
+- upload of the generated firmware evidence bundle and update package as a GitHub Actions artifact
 
 CI does not use private signing keys and does not commit generated `build/` or
 `dist/` outputs.
@@ -321,6 +322,47 @@ all manifest artifacts are present and match their SHA256 hashes, `trace-report.
 exists, starter evidence files are present, SBOM files are included when the
 manifest lists SBOM artifacts, and optional manifest signature verification
 passes when a signature and public key are supplied.
+
+## Firmware Update Package Demo
+
+The update package demo wraps a successful simulator firmware release into:
+
+```text
+dist/firmware-release/update-package/
+├── update-package.json
+├── payload/
+├── release-manifest.json
+├── trace-report.json
+├── evidence-bundle.tar.gz
+└── sbom/
+```
+
+Run it from Windows PowerShell after a Zephyr build:
+
+```powershell
+west build -b qemu_cortex_m3 firmware/app
+.\scripts\update-package-demo.ps1
+```
+
+Run it from Bash after a Zephyr build:
+
+```bash
+west build -b qemu_cortex_m3 firmware/app
+bash scripts/update-package-demo.sh
+```
+
+The demo requires an existing `build/zephyr` directory, regenerates firmware
+evidence with SBOM output, creates `update-package.json`, copies the selected
+firmware payload from `zephyr.bin` when available or `zephyr.elf` otherwise,
+and verifies the package. The verifier checks the payload exists and matches
+its SHA256, the release manifest exists and passes the schema, the evidence
+archive exists and passes the evidence bundle verifier, the package target
+matches when requested, and downgrade rejection works when an installed version
+is supplied.
+
+This is a simulator-first packaging and safety-check workflow only. It is not
+real OTA transport, not an MCUboot image format, not production signing, and
+not a certification claim.
 
 ## Release workflow target
 

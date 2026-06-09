@@ -158,6 +158,26 @@ class ReleaseToolsTest(unittest.TestCase):
         )
         return base, bundle, bundle.with_suffix(".tar.gz")
 
+    def _make_update_package(self, work: Path) -> tuple[Path, Path]:
+        base, bundle, _archive = self._make_evidence_bundle(work)
+        package_dir = base / "dist" / "firmware-release" / "update-package"
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "tools/create_update_package.py"),
+                "--manifest",
+                str(base / "dist" / "firmware-release" / "release-manifest.json"),
+                "--evidence-bundle",
+                str(bundle),
+                "--output-dir",
+                str(package_dir),
+            ],
+            cwd=base,
+            check=True,
+        )
+        return base, package_dir
+
     def test_manifest_and_verify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
@@ -817,6 +837,138 @@ class ReleaseToolsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("signature_verification: performed", result.stdout)
             self.assertIn("result: PASS", result.stdout)
+
+    def test_verify_update_package_accepts_valid_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_update_package.py"),
+                    "--package",
+                    str(package_dir),
+                    "--schema",
+                    str(REPO_ROOT / "schemas/release-manifest.schema.json"),
+                    "--target",
+                    "qemu_cortex_m3",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("evidence_bundle_verification: performed", result.stdout)
+            self.assertIn("result: PASS", result.stdout)
+
+    def test_verify_update_package_tampered_payload_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+            package = json.loads((package_dir / "update-package.json").read_text(encoding="utf-8"))
+            (package_dir / package["payload"]["path"]).write_bytes(b"tampered")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_update_package.py"),
+                    "--package",
+                    str(package_dir),
+                    "--schema",
+                    str(REPO_ROOT / "schemas/release-manifest.schema.json"),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("payload hash mismatch", result.stderr)
+
+    def test_verify_update_package_missing_payload_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+            package = json.loads((package_dir / "update-package.json").read_text(encoding="utf-8"))
+            (package_dir / package["payload"]["path"]).unlink()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_update_package.py"),
+                    "--package",
+                    str(package_dir),
+                    "--schema",
+                    str(REPO_ROOT / "schemas/release-manifest.schema.json"),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("payload missing", result.stderr)
+
+    def test_verify_update_package_rejects_downgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_update_package.py"),
+                    "--package",
+                    str(package_dir),
+                    "--schema",
+                    str(REPO_ROOT / "schemas/release-manifest.schema.json"),
+                    "--installed-version",
+                    "999.0.0",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("downgrade rejected", result.stderr)
+
+    def test_verify_update_package_rejects_target_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_update_package.py"),
+                    "--package",
+                    str(package_dir),
+                    "--schema",
+                    str(REPO_ROOT / "schemas/release-manifest.schema.json"),
+                    "--target",
+                    "other_target",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("target mismatch", result.stderr)
+
+    def test_verify_update_package_rejects_bad_evidence_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+            (package_dir / "evidence-bundle.tar.gz").write_bytes(b"not-a-tarball")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_update_package.py"),
+                    "--package",
+                    str(package_dir),
+                    "--schema",
+                    str(REPO_ROOT / "schemas/release-manifest.schema.json"),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("evidence bundle verification failed", result.stderr)
 
     def test_private_keys_and_signatures_are_git_ignored(self) -> None:
         if shutil.which("git") is None:

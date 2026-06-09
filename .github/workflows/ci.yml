@@ -63,6 +63,10 @@ jobs:
           bash scripts/verify-firmware-evidence.sh --bundle dist/firmware-release/evidence-bundle
           python tools/verify_evidence_bundle.py --bundle dist/firmware-release/evidence-bundle.tar.gz
 
+      - name: Create and verify simulator update package
+        working-directory: assureloop
+        run: bash scripts/update-package-demo.sh
+
       - name: Check firmware evidence outputs
         working-directory: assureloop
         run: |
@@ -71,6 +75,8 @@ jobs:
           test -d dist/firmware-release/evidence-bundle
           test -f dist/firmware-release/evidence-bundle.tar.gz
           test -d dist/firmware-release/evidence-bundle/sbom
+          test -f dist/firmware-release/update-package/update-package.json
+          test -f dist/firmware-release/update-package/evidence-bundle.tar.gz
 
       - name: Upload firmware evidence bundle
         uses: actions/upload-artifact@v4
@@ -81,4 +87,5 @@ jobs:
             assureloop/dist/firmware-release/trace-report.json
             assureloop/dist/firmware-release/evidence-bundle/**
             assureloop/dist/firmware-release/evidence-bundle.tar.gz
+            assureloop/dist/firmware-release/update-package/**
           if-no-files-found: error
