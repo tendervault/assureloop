@@ -218,6 +218,11 @@ try {
 
     Invoke-Checked -FilePath $Python -Arguments $ManifestArgs
 
+    Invoke-Checked -FilePath $Python -Arguments @(
+        "tools/validate_manifest.py",
+        "--manifest", $Manifest
+    )
+
     if ($Sign) {
         $PrivateKey = Join-Path $KeysDir "dev-rsa-private.pem"
         $PublicKey = Join-Path $KeysDir "dev-rsa-public.pem"

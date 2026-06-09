@@ -44,6 +44,11 @@ try {
     )
 
     Invoke-Checked -FilePath $Python -Arguments @(
+        "tools/validate_manifest.py",
+        "--manifest", $Manifest
+    )
+
+    Invoke-Checked -FilePath $Python -Arguments @(
         "tools/generate_trace_report.py",
         "--input", "samples/logs/controller_boot.log",
         "--output", $TraceReport

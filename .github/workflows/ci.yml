@@ -49,6 +49,10 @@ jobs:
         working-directory: assureloop
         run: bash scripts/firmware-evidence-demo.sh --generate-sbom
 
+      - name: Validate firmware release manifest
+        working-directory: assureloop
+        run: python tools/validate_manifest.py --manifest dist/firmware-release/release-manifest.json
+
       - name: Verify firmware release manifest
         working-directory: assureloop
         run: python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .

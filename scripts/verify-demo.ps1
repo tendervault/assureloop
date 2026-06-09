@@ -69,6 +69,11 @@ try {
         "--output", $Manifest
     )
 
+    Invoke-Checked -FilePath $Python -Arguments @(
+        "tools/validate_manifest.py",
+        "--manifest", $Manifest
+    )
+
     if (-not (Test-Path -LiteralPath $PrivateKey -PathType Leaf)) {
         Invoke-Checked -FilePath $OpenSslPath -Arguments @(
             "genpkey",

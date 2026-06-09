@@ -1,4 +1,4 @@
-.PHONY: test-tools manifest-demo trace-demo evidence-demo dev-keys sign-demo verify-demo clean
+.PHONY: test-tools manifest-demo validate-manifest trace-demo evidence-demo dev-keys sign-demo verify-demo clean
 
 DIST ?= dist
 MANIFEST ?= $(DIST)/release-manifest.json
@@ -20,12 +20,15 @@ manifest-demo: $(DIST)
 		--artifact README.md:doc \
 		--output $(MANIFEST)
 
+validate-manifest: manifest-demo
+	python3 tools/validate_manifest.py --manifest $(MANIFEST)
+
 trace-demo: $(DIST)
 	python3 tools/generate_trace_report.py \
 		--input samples/logs/controller_boot.log \
 		--output $(TRACE_REPORT)
 
-evidence-demo: manifest-demo trace-demo
+evidence-demo: validate-manifest trace-demo
 	python3 tools/build_evidence_bundle.py \
 		--manifest $(MANIFEST) \
 		--trace-report $(TRACE_REPORT) \
@@ -35,7 +38,7 @@ evidence-demo: manifest-demo trace-demo
 dev-keys:
 	./scripts/create_dev_keys.sh
 
-sign-demo: manifest-demo dev-keys
+sign-demo: validate-manifest dev-keys
 	python3 tools/sign_release.py \
 		--manifest $(MANIFEST) \
 		--private-key $(PRIVATE_KEY) \

@@ -149,6 +149,8 @@ rm -f "${signature}"
   "${artifact_args[@]}" \
   --output "${manifest}"
 
+"${PYTHON}" tools/validate_manifest.py --manifest "${manifest}"
+
 "${PYTHON}" tools/generate_trace_report.py \
   --input "${trace_log}" \
   --output "${trace_report}"

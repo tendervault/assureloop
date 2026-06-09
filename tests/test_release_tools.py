@@ -112,6 +112,16 @@ class ReleaseToolsTest(unittest.TestCase):
             subprocess.run(
                 [
                     sys.executable,
+                    str(REPO_ROOT / "tools/validate_manifest.py"),
+                    "--manifest",
+                    str(manifest),
+                ],
+                check=True,
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
                     str(REPO_ROOT / "tools/verify_release.py"),
                     "--manifest",
                     str(manifest),
@@ -137,6 +147,143 @@ class ReleaseToolsTest(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("hash mismatch", result.stderr)
+
+    def test_validate_manifest_accepts_valid_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            artifact = work / "firmware.bin"
+            artifact.write_bytes(b"assureloop-test-firmware")
+            manifest = work / "manifest.json"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/generate_release_manifest.py"),
+                    "--product",
+                    "test-product",
+                    "--version",
+                    "0.0.0-test",
+                    "--target",
+                    "unit-test",
+                    "--artifact",
+                    "firmware.bin:firmware",
+                    "--base-dir",
+                    str(work),
+                    "--source-date-epoch",
+                    "0",
+                    "--output",
+                    str(manifest),
+                ],
+                check=True,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/validate_manifest.py"),
+                    "--manifest",
+                    str(manifest),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("validated", result.stdout)
+
+    def test_validate_manifest_rejects_missing_required_field(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            artifact = work / "firmware.bin"
+            artifact.write_bytes(b"assureloop-test-firmware")
+            manifest = work / "manifest.json"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/generate_release_manifest.py"),
+                    "--product",
+                    "test-product",
+                    "--version",
+                    "0.0.0-test",
+                    "--target",
+                    "unit-test",
+                    "--artifact",
+                    "firmware.bin:firmware",
+                    "--base-dir",
+                    str(work),
+                    "--source-date-epoch",
+                    "0",
+                    "--output",
+                    str(manifest),
+                ],
+                check=True,
+            )
+
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            del data["product"]
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/validate_manifest.py"),
+                    "--manifest",
+                    str(manifest),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing required property 'product'", result.stderr)
+
+    def test_validate_manifest_rejects_malformed_sha256(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            artifact = work / "firmware.bin"
+            artifact.write_bytes(b"assureloop-test-firmware")
+            manifest = work / "manifest.json"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/generate_release_manifest.py"),
+                    "--product",
+                    "test-product",
+                    "--version",
+                    "0.0.0-test",
+                    "--target",
+                    "unit-test",
+                    "--artifact",
+                    "firmware.bin:firmware",
+                    "--base-dir",
+                    str(work),
+                    "--source-date-epoch",
+                    "0",
+                    "--output",
+                    str(manifest),
+                ],
+                check=True,
+            )
+
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["artifacts"][0]["sha256"] = "not-a-valid-sha"
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/validate_manifest.py"),
+                    "--manifest",
+                    str(manifest),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("$.artifacts[0].sha256", result.stderr)
 
     def test_trace_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -236,6 +383,16 @@ class ReleaseToolsTest(unittest.TestCase):
             for filename, contents in artifacts.items():
                 self.assertIn(filename, by_name)
                 self.assertEqual(by_name[filename]["sha256"], hashlib.sha256(contents).hexdigest())
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/validate_manifest.py"),
+                    "--manifest",
+                    str(manifest_path),
+                ],
+                check=True,
+            )
 
     def test_firmware_evidence_script_includes_generated_sbom_outputs(self) -> None:
         powershell = self._powershell()

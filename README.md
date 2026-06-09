@@ -23,6 +23,7 @@ workflow checks:
 - Zephyr setup from this repository's `west.yml`
 - simulator firmware build with `west build -p always -b qemu_cortex_m3 firmware/app`
 - unsigned firmware evidence generation with Zephyr SPDX SBOM output
+- release manifest schema validation with `python tools/validate_manifest.py --manifest dist/firmware-release/release-manifest.json`
 - release manifest verification with `python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .`
 - upload of the generated firmware evidence bundle as a GitHub Actions artifact
 
@@ -64,6 +65,7 @@ python3 tools/generate_release_manifest.py \
   --target host-demo \
   --artifact README.md:doc \
   --output dist/release-manifest.json
+python3 tools/validate_manifest.py --manifest dist/release-manifest.json
 python3 tools/verify_release.py --manifest dist/release-manifest.json --base-dir .
 python3 tools/generate_trace_report.py \
   --input samples/logs/controller_boot.log \
@@ -258,6 +260,30 @@ west spdx --init -d build
 west build -d build -b qemu_cortex_m3 firmware/app
 west spdx -d build
 ```
+
+## Release Manifest Schema
+
+Release manifests are validated against
+`schemas/release-manifest.schema.json`. That schema is part of AssureLoop's
+evidence contract: it documents the fields downstream tools can rely on, such
+as `product`, `version`, `target`, `generated_at`, artifact `path`, artifact
+`kind`, and artifact `sha256`.
+
+Validate a manifest from Windows PowerShell:
+
+```powershell
+py tools\validate_manifest.py --manifest dist\firmware-release\release-manifest.json
+```
+
+Validate a manifest from Bash:
+
+```bash
+python3 tools/validate_manifest.py --manifest dist/firmware-release/release-manifest.json
+```
+
+The validation step checks the manifest shape only. Use
+`tools/verify_release.py` as well to verify referenced artifact hashes and an
+optional manifest signature.
 
 ## Release workflow target
 
