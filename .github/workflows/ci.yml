@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tools:
+    name: Host tooling
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run host tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Build demo evidence bundle
+        run: make evidence-demo
+      - name: Upload evidence bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: assureloop-evidence-demo
+          path: |
+            dist/release-manifest.json
+            dist/trace-report.json
+            dist/evidence-bundle/**
+            dist/evidence-bundle.tar.gz
+
+  zephyr-build:
+    name: Zephyr qemu_cortex_m3 build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: assureloop
+      - name: Setup Zephyr project
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: assureloop
+          toolchains: arm-zephyr-eabi
+      - name: Build firmware
+        working-directory: assureloop
+        run: ./scripts/build_firmware.sh qemu_cortex_m3
+      - name: Upload firmware build outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: assureloop-firmware-qemu-cortex-m3
+          path: |
+            assureloop/build/zephyr/zephyr.*
+            assureloop/build/zephyr/.config

@@ -1,0 +1,2 @@
+# Host tooling currently uses only Python standard library.
+# Install pytest or other developer tools here later when needed.

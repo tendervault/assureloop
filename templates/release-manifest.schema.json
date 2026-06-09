@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assureloop.dev/schemas/release-manifest.v0.json",
+  "title": "AssureLoop Release Manifest v0",
+  "type": "object",
+  "required": ["schema", "schema_version", "project", "product", "version", "target", "build_profile", "generated_at", "git", "artifacts"],
+  "properties": {
+    "schema": {"type": "string"},
+    "schema_version": {"type": "string"},
+    "project": {"const": "AssureLoop"},
+    "product": {"type": "string"},
+    "version": {"type": "string"},
+    "target": {"type": "string"},
+    "build_profile": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "git": {
+      "type": "object",
+      "properties": {
+        "commit": {"type": "string"},
+        "short_commit": {"type": "string"},
+        "dirty": {"type": "boolean"}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "size_bytes", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "kind": {"type": "string"},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "notes": {"type": "array", "items": {"type": "string"}}
+  }
+}

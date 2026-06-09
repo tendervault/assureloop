@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+requirements:
+  - id: AL-REQ-001
+    title: Release identity is visible at boot
+    rationale: A tester must be able to connect a running firmware image to a release manifest.
+    verification: qemu-log-review
+    status: implemented-demo
+
+  - id: AL-REQ-002
+    title: Control-loop timing is measurable
+    rationale: Deterministic behavior cannot be discussed without measured jitter under a defined load.
+    verification: trace-report
+    status: implemented-demo
+
+  - id: AL-REQ-003
+    title: Release artifacts have SHA-256 integrity records
+    rationale: Reviewers need tamper-evident artifact records.
+    verification: manifest-verification
+    status: implemented
+
+  - id: AL-REQ-004
+    title: Release manifest can be signed and verified
+    rationale: Release metadata must be protected against post-build modification.
+    verification: signature-verification
+    status: implemented-dev-only
+
+  - id: AL-REQ-005
+    title: SBOM files are included in the evidence bundle
+    rationale: Product security review needs dependency visibility.
+    verification: west-spdx-ci
+    status: planned
+
+  - id: AL-REQ-006
+    title: Firmware image boots only when signature policy passes
+    rationale: Device must reject unauthorized firmware.
+    verification: mcuboot-negative-test
+    status: planned

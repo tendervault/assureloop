@@ -1,0 +1,9 @@
+[00:00:00.001,000] <inf> assureloop: AssureLoop controller demo booting
+[00:00:00.002,000] <inf> assureloop_release: release product=assureloop-controller-demo version=0.1.0-dev profile=dev git_sha=unknown
+[00:00:00.003,000] <inf> assureloop: loop_config period_ms=100 iterations=5
+[00:00:00.104,000] <inf> assureloop: loop iteration=1 expected_period_ns=100000000 actual_period_ns=100120000 jitter_ns=120000
+[00:00:00.204,000] <inf> assureloop: loop iteration=2 expected_period_ns=100000000 actual_period_ns=99990000 jitter_ns=-10000
+[00:00:00.304,000] <inf> assureloop: loop iteration=3 expected_period_ns=100000000 actual_period_ns=100030000 jitter_ns=30000
+[00:00:00.404,000] <inf> assureloop: loop iteration=4 expected_period_ns=100000000 actual_period_ns=100050000 jitter_ns=50000
+[00:00:00.504,000] <inf> assureloop: loop iteration=5 expected_period_ns=100000000 actual_period_ns=99980000 jitter_ns=-20000
+[00:00:00.505,000] <inf> assureloop: loop_summary iterations=5 min_jitter_ns=-20000 max_jitter_ns=120000 avg_abs_jitter_ns=46000

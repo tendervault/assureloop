@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "AssureLoop Controller Demo"
+
+menu "AssureLoop controller demo"
+
+config ASSURELOOP_LOOP_PERIOD_MS
+  int "Control-loop period in milliseconds"
+  default 100
+  range 1 60000
+  help
+    Period used by the controller demo loop.
+
+config ASSURELOOP_LOOP_ITERATIONS
+  int "Number of loop iterations before summary"
+  default 20
+  range 1 1000000
+  help
+    Number of iterations the demo loop runs before printing a summary.
+
+config ASSURELOOP_ENABLE_STARTUP_BANNER
+  bool "Emit startup banner"
+  default y
+
+endmenu
+
+source "Kconfig.zephyr"

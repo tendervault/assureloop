@@ -1,0 +1,26 @@
+name: Codex task
+description: Implementation task for Codex as senior engineer
+title: "codex: "
+labels: [codex, engineering]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Scope limits, boards, APIs, security language, or files not to touch.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification commands

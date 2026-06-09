@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+tests:
+  - id: AL-TST-001
+    requirement: AL-REQ-001
+    type: manual
+    command: west build -t run
+    expected: Boot logs include product, version, profile, and git SHA.
+    status: planned-pending-zephyr-build
+
+  - id: AL-TST-002
+    requirement: AL-REQ-002
+    type: automated
+    command: python3 tools/generate_trace_report.py --input samples/logs/controller_boot.log --output dist/trace-report.json
+    expected: Trace report includes sample count and jitter statistics.
+    status: implemented
+
+  - id: AL-TST-003
+    requirement: AL-REQ-003
+    type: automated
+    command: make manifest-demo && python3 tools/verify_release.py --manifest dist/release-manifest.json --base-dir .
+    expected: Verification succeeds before tamper and fails after artifact modification.
+    status: implemented
+
+  - id: AL-TST-004
+    requirement: AL-REQ-004
+    type: automated
+    command: make verify-demo
+    expected: Manifest signature verification succeeds using development keypair.
+    status: implemented-dev-only
+
+  - id: AL-TST-005
+    requirement: AL-REQ-005
+    type: automated
+    command: west spdx -d build
+    expected: SPDX files are generated and included in release manifest.
+    status: planned
+
+  - id: AL-TST-006
+    requirement: AL-REQ-006
+    type: manual-negative
+    command: planned
+    expected: Tampered firmware image is rejected by bootloader.
+    status: planned

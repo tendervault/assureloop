@@ -1,0 +1,27 @@
+# Zephyr / build outputs
+build/
+build-*/
+zephyr/
+modules/
+bootloader/
+tools/zephyr-sdk-*/
+.west/
+
+# AssureLoop generated artifacts
+dist/
+keys/
+*.sig
+*.tar.gz
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
