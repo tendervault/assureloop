@@ -1,0 +1,26 @@
+*** Booting Zephyr OS build 684c9e8f32e4 ***
+[00:00:00.000,000] <inf> assureloop: AssureLoop controller demo booting
+[00:00:00.000,000] <inf> assureloop_release: release product=assureloop-controller-demo version=0.1.0-dev profile=dev git_sha=unknown
+[00:00:00.000,000] <inf> assureloop: loop_config period_ms=100 iterations=20
+[00:00:00.110,000] <inf> assureloop: loop iteration=1 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.220,000] <inf> assureloop: loop iteration=2 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.330,000] <inf> assureloop: loop iteration=3 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.440,000] <inf> assureloop: loop iteration=4 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.550,000] <inf> assureloop: loop iteration=5 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.660,000] <inf> assureloop: loop iteration=6 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.770,000] <inf> assureloop: loop iteration=7 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.880,000] <inf> assureloop: loop iteration=8 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:00.990,000] <inf> assureloop: loop iteration=9 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.100,000] <inf> assureloop: loop iteration=10 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.210,000] <inf> assureloop: loop iteration=11 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.320,000] <inf> assureloop: loop iteration=12 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.430,000] <inf> assureloop: loop iteration=13 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.540,000] <inf> assureloop: loop iteration=14 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.650,000] <inf> assureloop: loop iteration=15 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.760,000] <inf> assureloop: loop iteration=16 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.870,000] <inf> assureloop: loop iteration=17 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:01.980,000] <inf> assureloop: loop iteration=18 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:02.090,000] <inf> assureloop: loop iteration=19 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:02.200,000] <inf> assureloop: loop iteration=20 expected_period_ns=100000000 actual_period_ns=110000000 jitter_ns=10000000
+[00:00:02.200,000] <inf> assureloop: loop_summary iterations=20 min_jitter_ns=10000000 max_jitter_ns=10000000 avg_abs_jitter_ns=10000000
+[00:00:02.200,000] <inf> assureloop: AssureLoop controller demo complete

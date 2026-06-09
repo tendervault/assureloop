@@ -137,6 +137,31 @@ Reference docs:
 - [Zephyr Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/)
 - [Zephyr SDK installation](https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html)
 
+## Firmware evidence demo
+
+After a successful simulator build:
+
+```powershell
+west build -b qemu_cortex_m3 firmware/app
+.\scripts\firmware-evidence-demo.ps1
+```
+
+The firmware evidence demo packages available Zephyr build outputs from
+`build/zephyr`, including `zephyr.elf`, `zephyr.bin`, `zephyr.map`, `.config`,
+and `zephyr.dts` when present. It uses
+`samples/logs/qemu_controller_boot.log` as the QEMU trace sample and writes:
+
+```text
+dist/firmware-release/
+├── release-manifest.json
+├── trace-report.json
+├── evidence-bundle/
+└── evidence-bundle.tar.gz
+```
+
+The manifest records SHA256 hashes for the collected firmware build artifacts.
+This is simulator evidence for development review, not a certification package.
+
 To generate an SPDX SBOM after a Zephyr build:
 
 ```bash
