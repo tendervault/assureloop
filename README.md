@@ -1,5 +1,7 @@
 # AssureLoop
 
+[![CI](https://github.com/tendervault/assureloop/actions/workflows/ci.yml/badge.svg)](https://github.com/tendervault/assureloop/actions/workflows/ci.yml)
+
 AssureLoop is an open-source secure release assurance platform for embedded controllers.
 
 The project starts with a narrow, practical wedge: a Zephyr-based controller reference application plus tooling for reproducible releases, SBOM capture, release manifests, evidence bundles, and testable control-loop telemetry.
@@ -11,6 +13,21 @@ AssureLoop is **not** a new RTOS. It is an OS-adjacent platform that makes exist
 `v0.1-dev`: repository scaffold, firmware demo skeleton, release/evidence tooling, and CI skeleton.
 
 Production readiness: **not yet**. The initial repo is meant for founder-led testing, Codex implementation work, and early design partner demos.
+
+## CI validation
+
+GitHub Actions runs on every pull request and every push to `main`. The CI
+workflow checks:
+
+- host-side Python tooling tests with `python -m unittest discover -s tests -v`
+- Zephyr setup from this repository's `west.yml`
+- simulator firmware build with `west build -p always -b qemu_cortex_m3 firmware/app`
+- unsigned firmware evidence generation with Zephyr SPDX SBOM output
+- release manifest verification with `python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .`
+- upload of the generated firmware evidence bundle as a GitHub Actions artifact
+
+CI does not use private signing keys and does not commit generated `build/` or
+`dist/` outputs.
 
 ## What this repo contains
 
@@ -146,6 +163,13 @@ west build -b qemu_cortex_m3 firmware/app
 .\scripts\firmware-evidence-demo.ps1
 ```
 
+On Linux/macOS, use the Bash helper instead:
+
+```bash
+west build -b qemu_cortex_m3 firmware/app
+bash scripts/firmware-evidence-demo.sh
+```
+
 This default firmware evidence demo does not generate an SBOM. It packages
 available Zephyr build outputs from `build/zephyr`, including `zephyr.elf`,
 `zephyr.bin`, `zephyr.map`, `.config`, and `zephyr.dts` when present. It uses
@@ -167,6 +191,12 @@ To include Zephyr SPDX SBOM output in the same release evidence:
 ```powershell
 west build -b qemu_cortex_m3 firmware/app
 .\scripts\firmware-evidence-demo.ps1 -GenerateSbom
+```
+
+On Linux/macOS:
+
+```bash
+bash scripts/firmware-evidence-demo.sh --generate-sbom
 ```
 
 With `-GenerateSbom`, the script runs `west spdx --build-dir build` against the

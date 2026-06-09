@@ -1,8 +1,11 @@
-name: ci
+name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,44 +17,58 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run host tests
-        run: python3 -m unittest discover -s tests -v
-      - name: Build demo evidence bundle
-        run: make evidence-demo
-      - name: Upload evidence bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: assureloop-evidence-demo
-          path: |
-            dist/release-manifest.json
-            dist/trace-report.json
-            dist/evidence-bundle/**
-            dist/evidence-bundle.tar.gz
 
-  zephyr-build:
-    name: Zephyr qemu_cortex_m3 build
+      - name: Run host tests
+        run: python -m unittest discover -s tests -v
+
+  firmware-evidence:
+    name: Zephyr qemu_cortex_m3 firmware evidence
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           path: assureloop
+
       - name: Setup Zephyr project
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: assureloop
           toolchains: arm-zephyr-eabi
+
       - name: Build firmware
         working-directory: assureloop
-        run: ./scripts/build_firmware.sh qemu_cortex_m3
-      - name: Upload firmware build outputs
+        run: west build -p always -b qemu_cortex_m3 firmware/app
+
+      - name: Generate firmware evidence bundle with SBOM
+        working-directory: assureloop
+        run: bash scripts/firmware-evidence-demo.sh --generate-sbom
+
+      - name: Verify firmware release manifest
+        working-directory: assureloop
+        run: python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .
+
+      - name: Check firmware evidence outputs
+        working-directory: assureloop
+        run: |
+          test -f dist/firmware-release/release-manifest.json
+          test -f dist/firmware-release/trace-report.json
+          test -d dist/firmware-release/evidence-bundle
+          test -f dist/firmware-release/evidence-bundle.tar.gz
+          test -d dist/firmware-release/evidence-bundle/sbom
+
+      - name: Upload firmware evidence bundle
         uses: actions/upload-artifact@v4
         with:
-          name: assureloop-firmware-qemu-cortex-m3
+          name: assureloop-firmware-evidence-qemu-cortex-m3
           path: |
-            assureloop/build/zephyr/zephyr.*
-            assureloop/build/zephyr/.config
+            assureloop/dist/firmware-release/release-manifest.json
+            assureloop/dist/firmware-release/trace-report.json
+            assureloop/dist/firmware-release/evidence-bundle/**
+            assureloop/dist/firmware-release/evidence-bundle.tar.gz
+          if-no-files-found: error
