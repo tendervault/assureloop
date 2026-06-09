@@ -28,6 +28,7 @@ workflow checks:
 - end-to-end evidence bundle verification with `scripts/verify-firmware-evidence.sh`
 - simulator-first firmware update package creation and verification
 - MCUboot-compatible signed simulator image creation and signed-payload update package verification
+- local OTA lifecycle simulation for stage, install, confirm, rollback, and rejection checks
 - upload of the generated firmware evidence bundle and update package as a GitHub Actions artifact
 
 CI does not use private signing keys and does not commit generated `build/` or
@@ -428,6 +429,69 @@ transport, not a production secure boot deployment, not a hardware board port,
 and not a safety or cybersecurity certification claim. The next OTA step is to
 add an update acceptance flow that consumes the signed payload, then move to a
 target with a verified MCUboot flash map and bootloader runtime path.
+
+## OTA Simulator Demo
+
+The OTA simulator demo models the local firmware update lifecycle using the
+signed-image update package:
+
+```powershell
+.\scripts\ota-sim-demo.ps1
+```
+
+Bash:
+
+```bash
+bash scripts/ota-sim-demo.sh
+```
+
+The demo uses or creates:
+
+```text
+dist/firmware-signed-release/update-package/
+dist/ota-sim/state.json
+```
+
+If the signed image update package does not exist yet, the demo runs the signed
+image workflow first. It then stages the signed update package, installs it,
+confirms it, demonstrates downgrade rejection, demonstrates tamper rejection,
+and prints the final simulator status.
+
+The state file records:
+
+```text
+current_version
+previous_version
+target
+staged_package
+staged_version
+installed_package
+installed_version
+confirmed
+rollback_available
+last_error
+history
+```
+
+You can inspect the generated state directly:
+
+```powershell
+py tools\simulate_ota.py status --state dist\ota-sim\state.json
+```
+
+Bash:
+
+```bash
+python3 tools/simulate_ota.py status --state dist/ota-sim/state.json
+```
+
+The simulator calls the update package verifier before staging or installing,
+so downgrade, tampered payload, and target mismatch checks use the same package
+verification path as the release tooling.
+
+This is a local OTA lifecycle simulation only. It is not network OTA transport,
+not a production bootloader acceptance algorithm, not a cloud deployment model,
+and not a production secure boot or certification claim.
 
 ## Release workflow target
 

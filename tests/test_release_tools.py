@@ -184,6 +184,38 @@ class ReleaseToolsTest(unittest.TestCase):
         )
         return base, package_dir
 
+    def _run_ota(
+        self,
+        action: str,
+        package_dir: Path | None,
+        state: Path,
+        *extra_args: str,
+        target: str = "qemu_cortex_m3",
+    ) -> subprocess.CompletedProcess[str]:
+        command = [
+            sys.executable,
+            str(REPO_ROOT / "tools/simulate_ota.py"),
+            "--action",
+            action,
+            "--state",
+            str(state),
+        ]
+        if package_dir is not None:
+            command += ["--package", str(package_dir)]
+        if target:
+            command += ["--target", target]
+        command += list(extra_args)
+        return subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def _read_state(self, state: Path) -> dict:
+        return json.loads(state.read_text(encoding="utf-8"))
+
     def test_manifest_and_verify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
@@ -1062,6 +1094,149 @@ class ReleaseToolsTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("evidence bundle verification failed", result.stderr)
 
+    def test_ota_simulator_valid_stage_install_confirm_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp), include_signed=True)
+            state = Path(tmp) / "ota-state.json"
+
+            stage = self._run_ota(
+                "stage",
+                package_dir,
+                state,
+                "--installed-version",
+                "0.0.0",
+            )
+            self.assertEqual(stage.returncode, 0, stage.stderr)
+            self.assertIn("result: PASS", stage.stdout)
+
+            install = self._run_ota("install", None, state)
+            self.assertEqual(install.returncode, 0, install.stderr)
+
+            confirm = self._run_ota("confirm", None, state)
+            self.assertEqual(confirm.returncode, 0, confirm.stderr)
+
+            data = self._read_state(state)
+            self.assertEqual(data["current_version"], "0.1.0-test")
+            self.assertEqual(data["installed_version"], "0.1.0-test")
+            self.assertTrue(data["confirmed"])
+            self.assertFalse(data["rollback_available"])
+            self.assertIsNone(data["staged_package"])
+            self.assertEqual(
+                [entry["action"] for entry in data["history"]],
+                ["stage", "install", "confirm"],
+            )
+
+    def test_ota_simulator_install_without_stage_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / "ota-state.json"
+
+            result = self._run_ota("install", None, state)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("no staged package", result.stderr)
+            data = self._read_state(state)
+            self.assertEqual(data["history"][-1]["action"], "install")
+            self.assertEqual(data["history"][-1]["result"], "FAIL")
+
+    def test_ota_simulator_rollback_restores_previous_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+            state = Path(tmp) / "ota-state.json"
+
+            self.assertEqual(
+                self._run_ota(
+                    "stage",
+                    package_dir,
+                    state,
+                    "--installed-version",
+                    "0.0.0",
+                ).returncode,
+                0,
+            )
+            self.assertEqual(self._run_ota("install", None, state).returncode, 0)
+
+            rollback = self._run_ota("rollback", None, state)
+
+            self.assertEqual(rollback.returncode, 0, rollback.stderr)
+            data = self._read_state(state)
+            self.assertEqual(data["current_version"], "0.0.0")
+            self.assertEqual(data["installed_version"], "0.0.0")
+            self.assertTrue(data["confirmed"])
+            self.assertFalse(data["rollback_available"])
+            self.assertIsNone(data["previous_version"])
+            self.assertEqual(data["history"][-1]["action"], "rollback")
+
+    def test_ota_simulator_rejects_downgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+            state = Path(tmp) / "ota-state.json"
+
+            result = self._run_ota(
+                "stage",
+                package_dir,
+                state,
+                "--installed-version",
+                "999.0.0",
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("downgrade rejected", result.stderr)
+            data = self._read_state(state)
+            self.assertIn("downgrade rejected", data["last_error"])
+            self.assertEqual(data["history"][-1]["result"], "FAIL")
+
+    def test_ota_simulator_rejects_target_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+            state = Path(tmp) / "ota-state.json"
+
+            result = self._run_ota("stage", package_dir, state, target="other_target")
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("target mismatch", result.stderr)
+            data = self._read_state(state)
+            self.assertIn("target mismatch", data["last_error"])
+
+    def test_ota_simulator_rejects_tampered_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp), include_signed=True)
+            package = json.loads((package_dir / "update-package.json").read_text(encoding="utf-8"))
+            (package_dir / package["payload"]["path"]).write_bytes(b"tampered")
+            state = Path(tmp) / "ota-state.json"
+
+            result = self._run_ota("stage", package_dir, state)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("payload hash mismatch", result.stderr)
+            data = self._read_state(state)
+            self.assertIn("payload hash mismatch", data["last_error"])
+            self.assertEqual(data["history"][-1]["action"], "stage")
+
+    def test_ota_simulator_status_prints_generated_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, package_dir = self._make_update_package(Path(tmp))
+            state = Path(tmp) / "ota-state.json"
+            self.assertEqual(self._run_ota("stage", package_dir, state).returncode, 0)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/simulate_ota.py"),
+                    "status",
+                    "--state",
+                    str(state),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("action: status", result.stdout)
+            self.assertIn("staged_version: 0.1.0-test", result.stdout)
+            self.assertIn("history_count: 1", result.stdout)
+
     def test_private_keys_and_signatures_are_git_ignored(self) -> None:
         if shutil.which("git") is None:
             self.skipTest("git is not available")
@@ -1073,6 +1248,7 @@ class ReleaseToolsTest(unittest.TestCase):
                 "keys/dev-rsa-private.pem",
                 "keys/mcuboot-dev-rsa-2048.pem",
                 "dist/firmware-release/release-manifest.sig",
+                "dist/ota-sim/state.json",
             ],
             cwd=REPO_ROOT,
             text=True,
@@ -1083,6 +1259,7 @@ class ReleaseToolsTest(unittest.TestCase):
         self.assertIn("keys/dev-rsa-private.pem", result.stdout)
         self.assertIn("keys/mcuboot-dev-rsa-2048.pem", result.stdout)
         self.assertIn("dist/firmware-release/release-manifest.sig", result.stdout)
+        self.assertIn("dist/ota-sim/state.json", result.stdout)
 
 
 if __name__ == "__main__":

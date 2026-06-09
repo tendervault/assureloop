@@ -71,6 +71,10 @@ jobs:
         working-directory: assureloop
         run: bash scripts/signed-image-demo.sh
 
+      - name: Run OTA simulator demo
+        working-directory: assureloop
+        run: bash scripts/ota-sim-demo.sh
+
       - name: Check firmware evidence outputs
         working-directory: assureloop
         run: |
@@ -85,6 +89,7 @@ jobs:
           test -f dist/firmware-signed-release/release-manifest.json
           test -f dist/firmware-signed-release/evidence-bundle.tar.gz
           test -f dist/firmware-signed-release/update-package/update-package.json
+          test -f dist/ota-sim/state.json
 
       - name: Upload firmware evidence bundle
         uses: actions/upload-artifact@v4
@@ -101,4 +106,5 @@ jobs:
             assureloop/dist/firmware-signed-release/evidence-bundle/**
             assureloop/dist/firmware-signed-release/evidence-bundle.tar.gz
             assureloop/dist/firmware-signed-release/update-package/**
+            assureloop/dist/ota-sim/state.json
           if-no-files-found: error
