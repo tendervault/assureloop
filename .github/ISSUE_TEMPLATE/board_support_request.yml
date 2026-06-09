@@ -1,0 +1,54 @@
+name: Board support request
+description: Request support for a physical Zephyr board
+title: "board: "
+labels: [board-support]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Board support is intentionally deferred until the simulator workflow is stable. Please use this template to explain why the board should be the next hardware target.
+  - type: input
+    id: board
+    attributes:
+      label: Zephyr board name
+      placeholder: "nucleo_h753zi, mimxrt1060_evk, ..."
+    validations:
+      required: true
+  - type: input
+    id: soc
+    attributes:
+      label: MCU/SOC
+      placeholder: "STM32H753, i.MX RT1062, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Why this board?
+      description: Explain industrial/controller relevance and why it is a good first hardware target.
+    validations:
+      required: true
+  - type: textarea
+    id: zephyr-support
+    attributes:
+      label: Existing Zephyr support
+      description: Link Zephyr board docs or upstream board files if available.
+    validations:
+      required: true
+  - type: textarea
+    id: boot-update
+    attributes:
+      label: Boot/update capabilities
+      description: Note flash layout, MCUboot support, external flash, and rollback constraints if known.
+  - type: textarea
+    id: hardware-access
+    attributes:
+      label: Hardware access
+      description: Who can test the board, and what debug/programming tools are available?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Suggested acceptance criteria
+      description: Include build, flash, run, evidence, and limitations documentation.

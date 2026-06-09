@@ -2,524 +2,199 @@
 
 [![CI](https://github.com/tendervault/assureloop/actions/workflows/ci.yml/badge.svg)](https://github.com/tendervault/assureloop/actions/workflows/ci.yml)
 
-AssureLoop is an open-source secure release assurance platform for embedded controllers.
+AssureLoop is open-source release assurance tooling for Zephyr-based embedded
+firmware. It helps developers build a simulator firmware image, generate an
+SBOM, create a release manifest, sign and verify evidence, package an update,
+and exercise a local OTA lifecycle simulator before moving to physical hardware.
 
-The project starts with a narrow, practical wedge: a Zephyr-based controller reference application plus tooling for reproducible releases, SBOM capture, release manifests, evidence bundles, and testable control-loop telemetry.
+## What AssureLoop Is / Is Not
 
-AssureLoop is **not** a new RTOS. It is an OS-adjacent platform that makes existing embedded stacks easier to ship, audit, update, and maintain.
+AssureLoop is:
 
-## Project status
+- release assurance tooling for embedded firmware,
+- a Zephyr-first simulator workflow,
+- a way to produce and verify manifests, SBOMs, evidence bundles, signed image
+  artifacts, update packages, and OTA simulator state,
+- an alpha project for founder/testing and early design-partner feedback.
 
-`v0.1-dev`: repository scaffold, firmware demo skeleton, release/evidence tooling, and CI skeleton.
+AssureLoop is not:
 
-Production readiness: **not yet**. The initial repo is meant for founder-led testing, Codex implementation work, and early design partner demos.
+- a new RTOS,
+- a production bootloader,
+- a production OTA transport,
+- a cloud update service,
+- physical hardware board support,
+- a production signing-key custody model,
+- a safety or cybersecurity certification claim.
 
-## CI validation
+Current simulator target: `qemu_cortex_m3`.
 
-GitHub Actions runs on every pull request and every push to `main`. The CI
-workflow checks:
+## Run The Full Simulator Demo
 
-- host-side Python tooling tests with `python -m unittest discover -s tests -v`
-- Zephyr setup from this repository's `west.yml`
-- simulator firmware build with `west build -p always -b qemu_cortex_m3 firmware/app`
-- unsigned firmware evidence generation with Zephyr SPDX SBOM output
-- release manifest schema validation with `python tools/validate_manifest.py --manifest dist/firmware-release/release-manifest.json`
-- release manifest verification with `python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .`
-- end-to-end evidence bundle verification with `scripts/verify-firmware-evidence.sh`
-- simulator-first firmware update package creation and verification
-- MCUboot-compatible signed simulator image creation and signed-payload update package verification
-- local OTA lifecycle simulation for stage, install, confirm, rollback, and rejection checks
-- upload of the generated firmware evidence bundle and update package as a GitHub Actions artifact
+The full demo requires a working Zephyr/west environment. Setup instructions are
+in [docs/contributor-quickstart.md](docs/contributor-quickstart.md).
 
-CI does not use private signing keys and does not commit generated `build/` or
-`dist/` outputs.
+Windows PowerShell:
 
-## What this repo contains
-
-```text
-.
-├── firmware/app/              Zephyr controller demo application
-├── tools/                     Release manifest, signing, verification, trace, evidence tooling
-├── evidence/                  Starter requirements, test matrix, and security checklist
-├── docs/                      Architecture, threat model, roadmap, release process
-├── scripts/                   Developer helper scripts
-├── tests/                     Host-side tests for AssureLoop tooling
-├── .github/workflows/         Initial CI workflows
-└── west.yml                   Zephyr workspace manifest pinned to Zephyr v4.4.0
+```powershell
+.\scripts\full-demo.ps1
 ```
 
-## First principles
-
-1. Use Zephyr first; do not build a kernel.
-2. Keep the core open and auditable.
-3. Support one controller-class target path before broad board support.
-4. Treat secure boot, signed updates, SBOMs, manifests, test evidence, and vulnerability response as first-class product features.
-5. Make every release explainable: what was built, from which source, with which config, tested how, and signed by whom.
-
-## Quick start: host-side tooling only
-
-This path works without a Zephyr SDK or hardware.
+Bash:
 
 ```bash
-python3 -m unittest discover -s tests -v
-mkdir -p dist
-python3 tools/generate_release_manifest.py \
-  --product assureloop-controller-demo \
-  --version 0.1.0-dev \
-  --target host-demo \
-  --artifact README.md:doc \
-  --output dist/release-manifest.json
-python3 tools/validate_manifest.py --manifest dist/release-manifest.json
-python3 tools/verify_release.py --manifest dist/release-manifest.json --base-dir .
-python3 tools/generate_trace_report.py \
-  --input samples/logs/controller_boot.log \
-  --output dist/trace-report.json
-python3 tools/build_evidence_bundle.py \
-  --manifest dist/release-manifest.json \
-  --trace-report dist/trace-report.json \
-  --evidence-dir evidence \
-  --output-dir dist/evidence-bundle
+bash scripts/full-demo.sh
 ```
 
-## Windows PowerShell developer commands
+The full demo runs host tests, checks the Zephyr simulator build, creates and
+verifies a signed image, generates firmware evidence with SBOM, verifies the
+evidence bundle, creates and verifies an update package, and runs the OTA
+simulator.
 
-Windows host-side validation does not require GNU make. From PowerShell, run:
+Generated output stays under ignored paths such as `build/`, `build-*`,
+`dist/`, and `keys/`.
+
+## Quick Start Without Zephyr
+
+Host-side tests and the README-based evidence demo do not require Zephyr or GNU
+make on Windows:
 
 ```powershell
 .\scripts\test-tools.ps1
 .\scripts\evidence-demo.ps1
 .\scripts\verify-demo.ps1
-.\scripts\clean.ps1
 ```
 
-The scripts use the Windows Python launcher (`py`) by default. To use another interpreter, pass `-Python`, for example:
+Use a specific Python interpreter when needed:
 
 ```powershell
 .\scripts\test-tools.ps1 -Python python
 ```
 
-`.\scripts\evidence-demo.ps1` writes the demo manifest, trace report, evidence bundle directory, and `dist/evidence-bundle.tar.gz`. `.\scripts\verify-demo.ps1` also requires OpenSSL because it creates development keys and verifies a manifest signature; pass `-OpenSsl C:\path\to\openssl.exe` if OpenSSL is not on `PATH`.
+Bash:
 
-## Quick start: Zephyr firmware build
-
-AssureLoop is a west manifest repository. Keep the west top directory above the
-AssureLoop checkout so Zephyr modules are installed as siblings of this repo,
-not inside AssureLoop's own `tools/` directory.
-
-### Windows PowerShell Zephyr setup
-
-These steps follow the official Zephyr getting-started and SDK installation
-flow, with the AssureLoop manifest pinned to Zephyr v4.4.0 and Zephyr SDK
-1.0.1.
-
-```powershell
-winget install Kitware.CMake Ninja-build.Ninja oss-winget.gperf Python.Python.3.12 Git.Git oss-winget.dtc wget 7zip.7zip
+```bash
+python3 -m unittest discover -s tests -v
+make evidence-demo
+make verify-demo
 ```
 
-Close and reopen PowerShell so the new tools are on `PATH`, then create the
-workspace:
+## Common Simulator Commands
 
-```powershell
-mkdir $Env:USERPROFILE\assureloop-zephyr
-cd $Env:USERPROFILE\assureloop-zephyr
-git clone https://github.com/tendervault/assureloop.git assureloop
-
-py -3.12 -m venv .venv
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-.\.venv\Scripts\Activate.ps1
-
-pip install west
-west init -l assureloop
-west update
-west zephyr-export
-python -m pip install @((west packages pip) -split ' ')
-
-cd zephyr
-west sdk install -t arm-zephyr-eabi
-
-cd ..\assureloop
-west build -b qemu_cortex_m3 firmware/app
-west build -t run
-```
-
-The QEMU run target is interactive. Use `Ctrl+A`, then `X`, to exit after the
-demo prints `loop_summary`.
-
-Expected runtime output includes:
-
-```text
-AssureLoop controller demo booting
-release product=assureloop-controller-demo version=0.1.0-dev profile=dev git_sha=unknown
-loop_config period_ms=100 iterations=20
-loop iteration=1 ...
-loop_summary iterations=20 ...
-```
-
-Reference docs:
-
-- [Zephyr Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/)
-- [Zephyr SDK installation](https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html)
-
-## Firmware evidence demo
-
-After a successful simulator build:
-
-```powershell
-west build -b qemu_cortex_m3 firmware/app
-.\scripts\firmware-evidence-demo.ps1
-```
-
-On Linux/macOS, use the Bash helper instead:
+Firmware build:
 
 ```bash
 west build -b qemu_cortex_m3 firmware/app
-bash scripts/firmware-evidence-demo.sh
 ```
 
-This default firmware evidence demo does not generate an SBOM. It packages
-available Zephyr build outputs from `build/zephyr`, including `zephyr.elf`,
-`zephyr.bin`, `zephyr.map`, `.config`, and `zephyr.dts` when present. It uses
-`samples/logs/qemu_controller_boot.log` as the QEMU trace sample and writes:
+Firmware run:
 
-```text
-dist/firmware-release/
-├── release-manifest.json
-├── trace-report.json
-├── evidence-bundle/
-└── evidence-bundle.tar.gz
+```bash
+west build -t run
 ```
 
-The manifest records SHA256 hashes for the collected firmware build artifacts.
-This is simulator evidence for development review, not a certification package.
-
-To include Zephyr SPDX SBOM output in the same release evidence:
+Firmware evidence with SBOM:
 
 ```powershell
-west build -b qemu_cortex_m3 firmware/app
 .\scripts\firmware-evidence-demo.ps1 -GenerateSbom
 ```
-
-On Linux/macOS:
 
 ```bash
 bash scripts/firmware-evidence-demo.sh --generate-sbom
 ```
 
-With `-GenerateSbom`, the script runs `west spdx --build-dir build` against the
-existing build directory. Zephyr writes generated SPDX files under:
-
-```text
-build/spdx/
-├── app.spdx
-├── zephyr.spdx
-├── build.spdx
-└── modules-deps.spdx
-```
-
-Those files are added to `release-manifest.json` as `sbom` artifacts and copied
-into `dist/firmware-release/evidence-bundle/sbom/`.
-
-To include Zephyr SPDX SBOM output and sign the release manifest with a local
-development key:
-
-```powershell
-west build -b qemu_cortex_m3 firmware/app
-.\scripts\firmware-evidence-demo.ps1 -GenerateSbom -Sign -OpenSsl 'C:\Program Files\Git\usr\bin\openssl.exe'
-```
-
-With `-Sign`, the script creates or reuses local development RSA keys under the
-ignored `keys/` directory, signs `dist/firmware-release/release-manifest.json`,
-writes `dist/firmware-release/release-manifest.sig`, and verifies the signature
-before completing. The public development key is copied into the evidence bundle
-under `signing/dev-rsa-public.pem`; the private key stays under `keys/` and must
-not be committed. This development signature only detects manifest changes after
-signing with that local key. It is not a production identity, secure key custody
-model, OTA update signature, MCUboot integration, or certification claim.
-
-To verify a signed firmware release manually:
-
-```powershell
-py tools\verify_release.py --manifest dist\firmware-release\release-manifest.json --base-dir . --signature dist\firmware-release\release-manifest.sig --public-key keys\dev-rsa-public.pem
-```
-
-Troubleshooting `west spdx`:
-
-- Run `west build -b qemu_cortex_m3 firmware/app` first.
-- Make sure `west`, CMake, Ninja, Zephyr Python packages, and Zephyr SDK 1.0.1
-  are available in the active PowerShell environment.
-- If `west spdx` reports a missing CMake API reply directory, rerun
-  `.\scripts\firmware-evidence-demo.ps1 -GenerateSbom`; the script initializes
-  SPDX metadata and refreshes the existing build before generating SPDX output.
-- If signing fails with `OpenSSL was not found`, install OpenSSL, add it to
-  `PATH`, or pass `-OpenSsl` with the full path to `openssl.exe`. Git for
-  Windows commonly provides OpenSSL at
-  `C:\Program Files\Git\usr\bin\openssl.exe`.
-- Generated SBOM, build, and release output stays under ignored `build/` and
-  `dist/` directories. Development private keys stay under ignored `keys/`.
-
-To generate an SPDX SBOM manually after a Zephyr build:
-
-```bash
-west spdx --init -d build
-west build -d build -b qemu_cortex_m3 firmware/app
-west spdx -d build
-```
-
-## Release Manifest Schema
-
-Release manifests are validated against
-`schemas/release-manifest.schema.json`. That schema is part of AssureLoop's
-evidence contract: it documents the fields downstream tools can rely on, such
-as `product`, `version`, `target`, `generated_at`, artifact `path`, artifact
-`kind`, and artifact `sha256`.
-
-Validate a manifest from Windows PowerShell:
-
-```powershell
-py tools\validate_manifest.py --manifest dist\firmware-release\release-manifest.json
-```
-
-Validate a manifest from Bash:
-
-```bash
-python3 tools/validate_manifest.py --manifest dist/firmware-release/release-manifest.json
-```
-
-The validation step checks the manifest shape only. Use
-`tools/verify_release.py` as well to verify referenced artifact hashes and an
-optional manifest signature.
-
-## Verify an Evidence Bundle
-
-Use the evidence bundle verifier to check a generated bundle as a complete
-release artifact. It accepts either the unpacked `evidence-bundle` directory or
-the `evidence-bundle.tar.gz` archive.
-
-Windows PowerShell:
+Evidence verification:
 
 ```powershell
 .\scripts\verify-firmware-evidence.ps1
-py tools\verify_evidence_bundle.py --bundle dist\firmware-release\evidence-bundle.tar.gz
 ```
-
-Bash:
 
 ```bash
 bash scripts/verify-firmware-evidence.sh
-python3 tools/verify_evidence_bundle.py --bundle dist/firmware-release/evidence-bundle.tar.gz
 ```
 
-Signed bundle verification:
-
-```powershell
-.\scripts\verify-firmware-evidence.ps1 `
-  -Bundle dist\firmware-release\evidence-bundle `
-  -Signature dist\firmware-release\evidence-bundle\release-manifest.sig `
-  -PublicKey dist\firmware-release\evidence-bundle\signing\dev-rsa-public.pem `
-  -OpenSsl 'C:\Program Files\Git\usr\bin\openssl.exe'
-```
-
-The verifier checks that `release-manifest.json` exists and passes the schema,
-all manifest artifacts are present and match their SHA256 hashes, `trace-report.json`
-exists, starter evidence files are present, SBOM files are included when the
-manifest lists SBOM artifacts, and optional manifest signature verification
-passes when a signature and public key are supplied.
-
-## Firmware Update Package Demo
-
-The update package demo wraps a successful simulator firmware release into:
-
-```text
-dist/firmware-release/update-package/
-├── update-package.json
-├── payload/
-├── release-manifest.json
-├── trace-report.json
-├── evidence-bundle.tar.gz
-└── sbom/
-```
-
-Run it from Windows PowerShell after a Zephyr build:
-
-```powershell
-west build -b qemu_cortex_m3 firmware/app
-.\scripts\update-package-demo.ps1
-```
-
-Run it from Bash after a Zephyr build:
-
-```bash
-west build -b qemu_cortex_m3 firmware/app
-bash scripts/update-package-demo.sh
-```
-
-The demo requires an existing `build/zephyr` directory, regenerates firmware
-evidence with SBOM output, creates `update-package.json`, copies the selected
-firmware payload from `zephyr.bin` when available or `zephyr.elf` otherwise,
-and verifies the package. The verifier checks the payload exists and matches
-its SHA256, the release manifest exists and passes the schema, the evidence
-archive exists and passes the evidence bundle verifier, the package target
-matches when requested, and downgrade rejection works when an installed version
-is supplied.
-
-This is a simulator-first packaging and safety-check workflow only. It is not
-real OTA transport, not an MCUboot image format, not production signing, and
-not a certification claim.
-
-## Signed Firmware Image Demo
-
-The signed image demo produces a qemu-compatible firmware image signed with
-Zephyr's MCUboot/imgtool signing support:
+Signed image demo:
 
 ```powershell
 .\scripts\signed-image-demo.ps1
 ```
 
-Bash:
-
 ```bash
 bash scripts/signed-image-demo.sh
 ```
 
-The script creates or reuses an ignored local development key:
+Update package demo:
 
-```text
-keys/mcuboot-dev-rsa-2048.pem
+```powershell
+.\scripts\update-package-demo.ps1
 ```
 
-That key is generated with MCUboot `imgtool keygen`, is used only for local
-development, and must not be committed or treated as a production signing
-identity.
-
-The demo keeps `qemu_cortex_m3` as the simulator target, but does not build or
-run the MCUboot bootloader under qemu yet. Investigation showed the upstream
-`qemu_cortex_m3` board exposes `soc-nv-flash` but does not enable a Zephyr flash
-driver satisfying MCUboot's `FLASH_MAP` dependency, so a full qemu MCUboot
-sysbuild bootloader run would require board/flash work outside this milestone.
-Instead, the demo builds the app with:
-
-```text
-CONFIG_BOOTLOADER_MCUBOOT=y
-CONFIG_BUILD_OUTPUT_BIN=y
-CONFIG_MCUBOOT_SIGNATURE_KEY_FILE=<local dev key>
+```bash
+bash scripts/update-package-demo.sh
 ```
 
-and applies the simulator-only partition overlay:
-
-```text
-firmware/app/overlays/qemu_cortex_m3_mcuboot.overlay
-```
-
-Outputs include:
-
-```text
-build-signed/zephyr/zephyr.signed.bin
-dist/firmware-signed-release/release-manifest.json
-dist/firmware-signed-release/evidence-bundle/
-dist/firmware-signed-release/evidence-bundle.tar.gz
-dist/firmware-signed-release/update-package/
-```
-
-The script verifies `zephyr.signed.bin` with `imgtool verify`, records it in the
-release manifest as `firmware-signed-image`, includes it in the evidence bundle,
-and creates an update package whose payload is `payload/zephyr.signed.bin`.
-
-This is MCUboot-compatible image-signing groundwork only. It is not real OTA
-transport, not a production secure boot deployment, not a hardware board port,
-and not a safety or cybersecurity certification claim. The next OTA step is to
-add an update acceptance flow that consumes the signed payload, then move to a
-target with a verified MCUboot flash map and bootloader runtime path.
-
-## OTA Simulator Demo
-
-The OTA simulator demo models the local firmware update lifecycle using the
-signed-image update package:
+OTA simulator demo:
 
 ```powershell
 .\scripts\ota-sim-demo.ps1
-```
-
-Bash:
-
-```bash
-bash scripts/ota-sim-demo.sh
-```
-
-The demo uses or creates:
-
-```text
-dist/firmware-signed-release/update-package/
-dist/ota-sim/state.json
-```
-
-If the signed image update package does not exist yet, the demo runs the signed
-image workflow first. It then stages the signed update package, installs it,
-confirms it, demonstrates downgrade rejection, demonstrates tamper rejection,
-and prints the final simulator status.
-
-The state file records:
-
-```text
-current_version
-previous_version
-target
-staged_package
-staged_version
-installed_package
-installed_version
-confirmed
-rollback_available
-last_error
-history
-```
-
-You can inspect the generated state directly:
-
-```powershell
 py tools\simulate_ota.py status --state dist\ota-sim\state.json
 ```
 
-Bash:
-
 ```bash
+bash scripts/ota-sim-demo.sh
 python3 tools/simulate_ota.py status --state dist/ota-sim/state.json
 ```
 
-The simulator calls the update package verifier before staging or installing,
-so downgrade, tampered payload, and target mismatch checks use the same package
-verification path as the release tooling.
+Clean generated output on Windows:
 
-This is a local OTA lifecycle simulation only. It is not network OTA transport,
-not a production bootloader acceptance algorithm, not a cloud deployment model,
-and not a production secure boot or certification claim.
-
-## Release workflow target
-
-A useful AssureLoop release should eventually produce:
-
-```text
-dist/
-├── firmware/
-│   ├── zephyr.bin
-│   ├── zephyr.hex
-│   └── zephyr.elf
-├── sbom/
-│   ├── app.spdx
-│   ├── zephyr.spdx
-│   ├── build.spdx
-│   └── modules-deps.spdx
-├── release-manifest.json
-├── release-manifest.sig
-├── trace-report.json
-└── evidence-bundle/
+```powershell
+.\scripts\clean.ps1
 ```
 
-## Initial development roles
+## Documentation
 
-- Founder / tester: define customer pain, run the workflows, break the demos, report what feels confusing or unconvincing.
-- Senior architect: keep scope narrow, protect the security/compliance model, define interfaces and acceptance criteria.
-- Senior engineer / Codex: implement the next issues in `docs/codex-backlog.md` and keep commits small and reviewable.
+- [Project status](docs/project-status.md)
+- [Release assurance flow](docs/release-assurance-flow.md)
+- [Contributor quickstart](docs/contributor-quickstart.md)
+- [Release checklist](docs/release-checklist.md)
+- [Architecture](docs/architecture.md)
+- [Threat model](docs/threat-model.md)
+- [Release process](docs/release-process.md)
+- [Roadmap](docs/roadmap.md)
+
+## CI Validation
+
+GitHub Actions runs host tests, sets up Zephyr from `west.yml`, builds
+`qemu_cortex_m3`, generates firmware evidence with SBOM, validates and verifies
+the release manifest, verifies the evidence bundle, creates and verifies update
+packages, builds the signed simulator image, and runs the OTA simulator.
+
+CI uses direct steps instead of `scripts/full-demo.sh` so generated outputs can
+be checked and uploaded as artifacts explicitly. CI does not use private signing
+keys and does not commit generated `build/`, `dist/`, or `keys/` output.
+
+## Repository Layout
+
+```text
+firmware/app/              Zephyr controller demo application
+tools/                     Release, evidence, verification, package, and OTA simulator tooling
+scripts/                   Windows PowerShell and Bash developer helpers
+evidence/                  Starter requirements, tests, and security checklist evidence
+schemas/                   Release manifest JSON Schema
+samples/logs/              Sample controller/QEMU logs for trace reports
+docs/                      Project status, architecture, quickstart, and release docs
+tests/                     Host-side unit tests
+.github/workflows/         CI workflow
+west.yml                   Zephyr workspace manifest pinned to Zephyr v4.4.0
+```
+
+## Contributing
+
+Use small, reviewable changes. Do not add physical board support, real OTA
+transport, cloud services, or production certification/security claims unless a
+specific issue scopes that work. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[AGENTS.md](AGENTS.md).
 
 ## License
 
-Apache-2.0. See `LICENSE`.
+Apache-2.0. See [LICENSE](LICENSE).

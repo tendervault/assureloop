@@ -3,6 +3,26 @@ description: Propose a scoped AssureLoop feature
 title: "feat: "
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep requests narrow and explicit. AssureLoop is currently simulator-first; real OTA, cloud services, physical board support, and production certification claims need separate scoping.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Release manifest
+        - Evidence bundle
+        - SBOM
+        - Signing
+        - Update package
+        - OTA simulator
+        - Firmware demo
+        - Developer experience
+        - Documentation
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
@@ -14,8 +34,14 @@ body:
     id: proposal
     attributes:
       label: Proposal
+      description: Describe the smallest useful version of the feature.
     validations:
       required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: Scope limits
+      description: What should this not do?
   - type: textarea
     id: acceptance
     attributes:

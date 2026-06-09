@@ -19,6 +19,21 @@ class ReleaseToolsTest(unittest.TestCase):
     def _powershell(self) -> str | None:
         return shutil.which("powershell") or shutil.which("pwsh")
 
+    def _bash(self) -> str | None:
+        if os.name == "nt":
+            candidates = [
+                r"C:\Program Files\Git\bin\bash.exe",
+                r"C:\Program Files\Git\usr\bin\bash.exe",
+                shutil.which("bash"),
+            ]
+        else:
+            candidates = [shutil.which("bash")]
+
+        for candidate in candidates:
+            if candidate and Path(candidate).is_file():
+                return candidate
+        return None
+
     def _write_fake_openssl(self, work: Path) -> Path:
         fake_impl = work / "fake_openssl.py"
         fake_impl.write_text(
@@ -1236,6 +1251,111 @@ class ReleaseToolsTest(unittest.TestCase):
             self.assertIn("action: status", result.stdout)
             self.assertIn("staged_version: 0.1.0-test", result.stdout)
             self.assertIn("history_count: 1", result.stdout)
+
+    def test_public_alpha_docs_are_present(self) -> None:
+        required_docs = {
+            "docs/project-status.md": [
+                "AL-010",
+                "simulator-first",
+                "not production-ready",
+            ],
+            "docs/release-assurance-flow.md": [
+                "Zephyr build",
+                "release-manifest.json",
+                "OTA simulator",
+            ],
+            "docs/contributor-quickstart.md": [
+                "Windows Setup",
+                "Bash/Linux Setup",
+                "Generated Folders To Avoid Committing",
+            ],
+            "docs/release-checklist.md": [
+                "Zephyr simulator build",
+                "Evidence bundle verification",
+                "GitHub Actions",
+            ],
+        }
+
+        for relative_path, expected_text in required_docs.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in expected_text:
+                self.assertIn(text, contents, relative_path)
+
+    def test_full_demo_scripts_reference_required_flow(self) -> None:
+        required_steps = [
+            "west",
+            "signed-image-demo",
+            "firmware-evidence-demo",
+            "verify-firmware-evidence",
+            "update-package-demo",
+            "ota-sim-demo",
+        ]
+
+        for relative_path in ("scripts/full-demo.ps1", "scripts/full-demo.sh"):
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for step in required_steps:
+                self.assertIn(step, contents, relative_path)
+            self.assertIn("west was not found", contents)
+
+        powershell_contents = (REPO_ROOT / "scripts/full-demo.ps1").read_text(encoding="utf-8")
+        bash_contents = (REPO_ROOT / "scripts/full-demo.sh").read_text(encoding="utf-8")
+        self.assertIn("test-tools", powershell_contents)
+        self.assertIn("unittest discover", bash_contents)
+
+    def test_full_demo_bash_script_has_valid_syntax(self) -> None:
+        bash = self._bash()
+        if bash is None:
+            self.skipTest("bash is not available")
+
+        result = subprocess.run(
+            [bash, "-n", str(REPO_ROOT / "scripts/full-demo.sh")],
+            cwd=REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_full_demo_powershell_script_has_valid_syntax(self) -> None:
+        powershell = self._powershell()
+        if powershell is None:
+            self.skipTest("PowerShell is not available")
+
+        script = REPO_ROOT / "scripts/full-demo.ps1"
+        command = (
+            "$errors = $null; "
+            f"$null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw '{script}'), [ref]$errors); "
+            "if ($errors) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }"
+        )
+        result = subprocess.run(
+            [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+            cwd=REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_issue_templates_include_public_alpha_paths(self) -> None:
+        templates = {
+            ".github/ISSUE_TEMPLATE/bug_report.yml": ["Host tooling", "OTA simulator"],
+            ".github/ISSUE_TEMPLATE/feature_request.yml": ["Scope limits", "Developer experience"],
+            ".github/ISSUE_TEMPLATE/board_support_request.yml": [
+                "Board support request",
+                "Boot/update capabilities",
+            ],
+        }
+
+        for relative_path, expected_text in templates.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in expected_text:
+                self.assertIn(text, contents, relative_path)
 
     def test_private_keys_and_signatures_are_git_ignored(self) -> None:
         if shutil.which("git") is None:

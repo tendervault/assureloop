@@ -3,6 +3,39 @@ description: Report a reproducible AssureLoop issue
 title: "bug: "
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing AssureLoop. Please include exact commands and avoid production/certification assumptions unless the issue is specifically about unsupported wording.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Host tooling
+        - Zephyr qemu build
+        - Firmware evidence
+        - Signed image
+        - Update package
+        - OTA simulator
+        - Documentation
+        - CI
+    validations:
+      required: true
+  - type: input
+    id: host-os
+    attributes:
+      label: Host OS
+      placeholder: "Windows 11, Ubuntu 24.04, macOS version"
+    validations:
+      required: true
+  - type: input
+    id: target
+    attributes:
+      label: Target
+      placeholder: "qemu_cortex_m3"
+    validations:
+      required: true
   - type: textarea
     id: what-happened
     attributes:
@@ -13,7 +46,10 @@ body:
     id: reproduce
     attributes:
       label: Reproduction steps
-      description: Include commands, board, host OS, and logs.
+      description: Include exact commands and relevant environment variables.
+      placeholder: |
+        1. west build -b qemu_cortex_m3 firmware/app
+        2. .\scripts\firmware-evidence-demo.ps1 -GenerateSbom
     validations:
       required: true
   - type: textarea
@@ -22,3 +58,8 @@ body:
       label: Expected result
     validations:
       required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Paste the smallest useful output block.
