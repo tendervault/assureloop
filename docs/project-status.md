@@ -28,6 +28,8 @@ MCUboot-compatible signed application image for development verification.
   checks.
 - Simulates local OTA lifecycle states: staged, installed, confirmed, rollback,
   rejected downgrade, rejected tamper, and rejected target mismatch.
+- Documents the first recommended physical board target and board-readiness
+  plan without adding hardware support yet.
 - Runs host tests, Zephyr build, evidence generation, package verification, and
   OTA simulator checks in GitHub Actions.
 
@@ -75,15 +77,17 @@ must not be reused for production releases.
 | AL-008 | Done | Simulator-first update packages are created and verified with payload safety checks. |
 | AL-009 | Done | MCUboot-compatible signed image workflow produces and verifies signed simulator image artifacts. |
 | AL-010 | Done | Local OTA simulator models stage, install, confirm, rollback, and rejection states. |
+| AL-011 | Done | Public alpha docs, full-demo wrappers, contributor quickstart, release checklist, and issue templates make the project easier to evaluate. |
+| AL-012 | Done | First hardware target selection recommends ST NUCLEO-H563ZI, names nRF52840 DK as backup, and defines board-readiness milestones. |
 
 ## Next Planned Milestones
 
-- AL-011: public alpha developer experience and release polish.
+- AL-013: bring up ST NUCLEO-H563ZI with basic Zephyr logging.
+- AL-014: generate signed image evidence for ST NUCLEO-H563ZI.
+- AL-015: verify MCUboot boot behavior on ST NUCLEO-H563ZI.
+- AL-016: demonstrate local update and rollback behavior on ST NUCLEO-H563ZI
+  if practical.
 - Improve evidence quality and reviewer-facing evidence bundle content.
-- Select one physical Zephyr board only after the simulator workflow remains
-  stable.
-- Investigate a board/runtime path where MCUboot bootloader execution can be
-  verified end to end.
 - Define a production signing threat model and key custody policy before any
   production signing claims.
 - Add real OTA transport only after local package acceptance and rollback

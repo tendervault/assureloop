@@ -1255,9 +1255,16 @@ class ReleaseToolsTest(unittest.TestCase):
     def test_public_alpha_docs_are_present(self) -> None:
         required_docs = {
             "docs/project-status.md": [
-                "AL-010",
+                "AL-012",
                 "simulator-first",
                 "not production-ready",
+            ],
+            "docs/hardware-target-selection.md": [
+                "Recommended first board",
+                "ST NUCLEO-H563ZI",
+                "Backup board",
+                "Board-Readiness Checklist",
+                "AL-013",
             ],
             "docs/release-assurance-flow.md": [
                 "Zephyr build",
