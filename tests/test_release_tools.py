@@ -69,12 +69,94 @@ class ReleaseToolsTest(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        fake_openssl = work / "openssl.cmd"
-        fake_openssl.write_text(
-            f'@echo off\r\n"{sys.executable}" "%~dp0fake_openssl.py" %*\r\n',
-            encoding="utf-8",
-        )
+        if os.name == "nt":
+            fake_openssl = work / "openssl.cmd"
+            fake_openssl.write_text(
+                f'@echo off\r\n"{sys.executable}" "%~dp0fake_openssl.py" %*\r\n',
+                encoding="utf-8",
+            )
+        else:
+            fake_openssl = work / "openssl"
+            fake_openssl.write_text(
+                f'#!/usr/bin/env sh\n"{sys.executable}" "$(dirname "$0")/fake_openssl.py" "$@"\n',
+                encoding="utf-8",
+            )
+            fake_openssl.chmod(0o755)
         return fake_openssl
+
+    def _make_evidence_bundle(
+        self, work: Path, *, include_sbom: bool = True
+    ) -> tuple[Path, Path, Path]:
+        base = work / "repo"
+        zephyr_build = base / "build" / "zephyr"
+        zephyr_build.mkdir(parents=True)
+        (zephyr_build / "zephyr.elf").write_bytes(b"fake-zephyr-elf")
+
+        artifact_args = ["--artifact", "build/zephyr/zephyr.elf:firmware-elf"]
+        if include_sbom:
+            spdx_dir = base / "build" / "spdx"
+            spdx_dir.mkdir(parents=True)
+            (spdx_dir / "app.spdx").write_bytes(
+                b"SPDXVersion: SPDX-2.3\nDocumentName: app\n"
+            )
+            artifact_args += ["--artifact", "build/spdx/app.spdx:sbom"]
+
+        out_dir = base / "dist" / "firmware-release"
+        manifest = out_dir / "release-manifest.json"
+        trace_report = out_dir / "trace-report.json"
+        bundle = out_dir / "evidence-bundle"
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "tools/generate_release_manifest.py"),
+                "--product",
+                "assureloop-controller-demo",
+                "--version",
+                "0.1.0-test",
+                "--target",
+                "qemu_cortex_m3",
+                "--build-profile",
+                "test",
+                *artifact_args,
+                "--base-dir",
+                str(base),
+                "--source-date-epoch",
+                "0",
+                "--output",
+                str(manifest),
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "tools/generate_trace_report.py"),
+                "--input",
+                str(REPO_ROOT / "samples/logs/qemu_controller_boot.log"),
+                "--output",
+                str(trace_report),
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "tools/build_evidence_bundle.py"),
+                "--manifest",
+                str(manifest),
+                "--trace-report",
+                str(trace_report),
+                "--evidence-dir",
+                str(REPO_ROOT / "evidence"),
+                "--output-dir",
+                str(bundle),
+                "--base-dir",
+                str(base),
+            ],
+            check=True,
+        )
+        return base, bundle, bundle.with_suffix(".tar.gz")
 
     def test_manifest_and_verify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -564,6 +646,177 @@ class ReleaseToolsTest(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("OpenSSL was not found", result.stdout + result.stderr)
+
+    def test_verify_evidence_bundle_accepts_valid_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, bundle, archive = self._make_evidence_bundle(Path(tmp))
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_evidence_bundle.py"),
+                    "--bundle",
+                    str(bundle),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("result: PASS", result.stdout)
+
+            archive_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_evidence_bundle.py"),
+                    "--bundle",
+                    str(archive),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(archive_result.returncode, 0, archive_result.stderr)
+            self.assertIn("result: PASS", archive_result.stdout)
+
+    def test_verify_evidence_bundle_missing_manifest_fails_clearly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, bundle, _archive = self._make_evidence_bundle(Path(tmp))
+            (bundle / "release-manifest.json").unlink()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_evidence_bundle.py"),
+                    "--bundle",
+                    str(bundle),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("release-manifest.json not found", result.stderr)
+            self.assertIn("result: FAIL", result.stdout)
+
+    def test_verify_evidence_bundle_invalid_manifest_schema_fails_clearly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, bundle, _archive = self._make_evidence_bundle(Path(tmp))
+            manifest_path = bundle / "release-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            del manifest["product"]
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_evidence_bundle.py"),
+                    "--bundle",
+                    str(bundle),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("manifest schema", result.stderr)
+            self.assertIn("missing required property 'product'", result.stderr)
+
+    def test_verify_evidence_bundle_tampered_artifact_fails_hash_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, bundle, _archive = self._make_evidence_bundle(Path(tmp))
+            (bundle / "artifacts" / "build" / "zephyr" / "zephyr.elf").write_bytes(
+                b"tampered"
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_evidence_bundle.py"),
+                    "--bundle",
+                    str(bundle),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("hash mismatch for build/zephyr/zephyr.elf", result.stderr)
+
+    def test_verify_evidence_bundle_missing_sbom_file_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _base, bundle, _archive = self._make_evidence_bundle(Path(tmp), include_sbom=True)
+            (bundle / "sbom" / "app.spdx").unlink()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_evidence_bundle.py"),
+                    "--bundle",
+                    str(bundle),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing SBOM file in bundle: sbom/app.spdx", result.stderr)
+
+    def test_verify_evidence_bundle_accepts_signed_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            _base, bundle, _archive = self._make_evidence_bundle(work)
+            fake_openssl = self._write_fake_openssl(work)
+            private_key = work / "dev-rsa-private.pem"
+            private_key.write_text("FAKE PRIVATE KEY\n", encoding="utf-8")
+            public_key = bundle / "signing" / "dev-rsa-public.pem"
+            public_key.parent.mkdir()
+            public_key.write_text("FAKE PUBLIC KEY\n", encoding="utf-8")
+            signature = bundle / "release-manifest.sig"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/sign_release.py"),
+                    "--manifest",
+                    str(bundle / "release-manifest.json"),
+                    "--private-key",
+                    str(private_key),
+                    "--signature",
+                    str(signature),
+                    "--openssl",
+                    str(fake_openssl),
+                ],
+                check=True,
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/verify_evidence_bundle.py"),
+                    "--bundle",
+                    str(bundle),
+                    "--signature",
+                    str(signature),
+                    "--public-key",
+                    str(public_key),
+                    "--openssl",
+                    str(fake_openssl),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("signature_verification: performed", result.stdout)
+            self.assertIn("result: PASS", result.stdout)
 
     def test_private_keys_and_signatures_are_git_ignored(self) -> None:
         if shutil.which("git") is None:

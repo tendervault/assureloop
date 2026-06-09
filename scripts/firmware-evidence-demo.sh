@@ -104,7 +104,6 @@ if ((GENERATE_SBOM)); then
   sbom_count=0
   while IFS= read -r sbom_file; do
     artifact_args+=(--artifact "${sbom_file}:sbom")
-    bundle_include_args+=(--include-file "${sbom_file}" "sbom/$(basename "${sbom_file}")")
     sbom_count=$((sbom_count + 1))
     echo "including ${sbom_file} as sbom"
   done < <(

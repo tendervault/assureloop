@@ -25,6 +25,7 @@ workflow checks:
 - unsigned firmware evidence generation with Zephyr SPDX SBOM output
 - release manifest schema validation with `python tools/validate_manifest.py --manifest dist/firmware-release/release-manifest.json`
 - release manifest verification with `python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .`
+- end-to-end evidence bundle verification with `scripts/verify-firmware-evidence.sh`
 - upload of the generated firmware evidence bundle as a GitHub Actions artifact
 
 CI does not use private signing keys and does not commit generated `build/` or
@@ -284,6 +285,42 @@ python3 tools/validate_manifest.py --manifest dist/firmware-release/release-mani
 The validation step checks the manifest shape only. Use
 `tools/verify_release.py` as well to verify referenced artifact hashes and an
 optional manifest signature.
+
+## Verify an Evidence Bundle
+
+Use the evidence bundle verifier to check a generated bundle as a complete
+release artifact. It accepts either the unpacked `evidence-bundle` directory or
+the `evidence-bundle.tar.gz` archive.
+
+Windows PowerShell:
+
+```powershell
+.\scripts\verify-firmware-evidence.ps1
+py tools\verify_evidence_bundle.py --bundle dist\firmware-release\evidence-bundle.tar.gz
+```
+
+Bash:
+
+```bash
+bash scripts/verify-firmware-evidence.sh
+python3 tools/verify_evidence_bundle.py --bundle dist/firmware-release/evidence-bundle.tar.gz
+```
+
+Signed bundle verification:
+
+```powershell
+.\scripts\verify-firmware-evidence.ps1 `
+  -Bundle dist\firmware-release\evidence-bundle `
+  -Signature dist\firmware-release\evidence-bundle\release-manifest.sig `
+  -PublicKey dist\firmware-release\evidence-bundle\signing\dev-rsa-public.pem `
+  -OpenSsl 'C:\Program Files\Git\usr\bin\openssl.exe'
+```
+
+The verifier checks that `release-manifest.json` exists and passes the schema,
+all manifest artifacts are present and match their SHA256 hashes, `trace-report.json`
+exists, starter evidence files are present, SBOM files are included when the
+manifest lists SBOM artifacts, and optional manifest signature verification
+passes when a signature and public key are supplied.
 
 ## Release workflow target
 

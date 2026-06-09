@@ -57,6 +57,12 @@ jobs:
         working-directory: assureloop
         run: python tools/verify_release.py --manifest dist/firmware-release/release-manifest.json --base-dir .
 
+      - name: Verify firmware evidence bundle
+        working-directory: assureloop
+        run: |
+          bash scripts/verify-firmware-evidence.sh --bundle dist/firmware-release/evidence-bundle
+          python tools/verify_evidence_bundle.py --bundle dist/firmware-release/evidence-bundle.tar.gz
+
       - name: Check firmware evidence outputs
         working-directory: assureloop
         run: |

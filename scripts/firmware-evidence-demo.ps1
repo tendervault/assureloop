@@ -183,7 +183,6 @@ try {
         foreach ($SbomFile in $SbomFiles) {
             $ManifestPath = Convert-ToManifestPath -Path $SbomFile.FullName
             $ArtifactArgs += @("--artifact", "$($ManifestPath):sbom")
-            $BundleIncludeArgs += @("--include-file", $ManifestPath, "sbom/$($SbomFile.Name)")
             Write-Host "including $ManifestPath as sbom"
         }
     }
