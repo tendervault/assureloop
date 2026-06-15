@@ -22,6 +22,46 @@ config ASSURELOOP_ENABLE_STARTUP_BANNER
   bool "Emit startup banner"
   default y
 
+config ASSURELOOP_MCUBOOT_CONFIRM_ON_BOOT
+  bool "Confirm the active MCUboot image on boot"
+  depends on BOOTLOADER_MCUBOOT && MCUBOOT_IMG_MANAGER
+  default n
+  help
+    Mark the currently running MCUboot image as confirmed during startup.
+    This is intended for development lifecycle experiments only.
+
+config ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT
+  bool "Request an MCUboot upgrade on boot"
+  depends on BOOTLOADER_MCUBOOT && MCUBOOT_IMG_MANAGER && REBOOT
+  default n
+  help
+    Mark the secondary MCUboot slot as pending during startup and reboot.
+    This is intended for local development update-lifecycle experiments.
+
+config ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_PERMANENT
+  bool "Request MCUboot upgrade as permanent"
+  depends on ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT
+  default n
+  help
+    Request a permanent upgrade instead of a test upgrade. Leave disabled
+    when investigating rollback behavior.
+
+config ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE
+  bool "Build NUCLEO-H563ZI secondary-slot update image"
+  depends on BOOTLOADER_MCUBOOT && MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET
+  default n
+  help
+    Adjust the generated hex load address so a signed development image can
+    be flashed to the NUCLEO-H563ZI MCUboot secondary slot for local update
+    lifecycle investigation.
+
 endmenu
 
 source "Kconfig.zephyr"
+
+DT_CHOSEN_Z_CODE_PARTITION := zephyr,code-partition
+
+config BUILD_OUTPUT_ADJUST_LMA
+  default "$(dt_node_reg_addr_hex,$(dt_nodelabel_path,slot1_partition))-\
+    $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_CODE_PARTITION))+\
+    $(dt_node_int_prop_hex,$(dt_node_parent,$(dt_node_parent,$(dt_nodelabel_path,slot1_partition))),erase-block-size)" if ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE

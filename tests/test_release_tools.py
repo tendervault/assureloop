@@ -1327,6 +1327,15 @@ class ReleaseToolsTest(unittest.TestCase):
                 "loop_summary",
                 "not production secure boot certification",
             ],
+            "docs/nucleo-h563zi-mcuboot-update-lifecycle.md": [
+                "MCUboot update lifecycle",
+                "nucleo_h563zi",
+                "secondary slot",
+                "confirm",
+                "rollback",
+                "COM4",
+                "not production OTA",
+            ],
             "docs/release-assurance-flow.md": [
                 "Zephyr build",
                 "release-manifest.json",
@@ -1511,6 +1520,79 @@ class ReleaseToolsTest(unittest.TestCase):
             ] + expected_text:
                 self.assertIn(text, contents, relative_path)
 
+    def test_nucleo_h563zi_mcuboot_update_lifecycle_scripts_and_docs_are_present(self) -> None:
+        docs = (
+            REPO_ROOT / "docs/nucleo-h563zi-mcuboot-update-lifecycle.md"
+        ).read_text(encoding="utf-8")
+        for text in [
+            "MCUboot update lifecycle",
+            "swap-using-offset",
+            "0x08102000",
+            "secondary slot",
+            "COM4",
+            "confirm",
+            "rollback",
+            "downgrade",
+            "tamper",
+            "Status: partial, blocker documented",
+            "not production OTA",
+        ]:
+            self.assertIn(text, docs)
+
+        kconfig = (REPO_ROOT / "firmware/app/Kconfig").read_text(encoding="utf-8")
+        for text in [
+            "ASSURELOOP_MCUBOOT_CONFIRM_ON_BOOT",
+            "ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT",
+            "ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_PERMANENT",
+            "ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE",
+            "BUILD_OUTPUT_ADJUST_LMA",
+        ]:
+            self.assertIn(text, kconfig)
+
+        main_c = (REPO_ROOT / "firmware/app/src/main.c").read_text(encoding="utf-8")
+        for text in [
+            "boot_write_img_confirmed",
+            "boot_request_upgrade",
+            "mcuboot_update_request",
+            "mcuboot_confirm",
+        ]:
+            self.assertIn(text, main_c)
+
+        scripts = {
+            "scripts/mcuboot-update-lifecycle-nucleo-h563zi.ps1": [
+                "-Flash",
+                "-ConfirmUpdate",
+                "build-mcuboot-lifecycle-nucleo-h563zi-baseline",
+                "build-mcuboot-lifecycle-nucleo-h563zi-update",
+                "SB_CONFIG_MCUBOOT_MODE_SWAP_USING_OFFSET=y",
+                "CONFIG_ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE=y",
+                "0x08102000",
+                "STM32CubeProgrammer",
+            ],
+            "scripts/mcuboot-update-lifecycle-nucleo-h563zi.sh": [
+                "--flash",
+                "--confirm-update",
+                "build-mcuboot-lifecycle-nucleo-h563zi-baseline",
+                "build-mcuboot-lifecycle-nucleo-h563zi-update",
+                "SB_CONFIG_MCUBOOT_MODE_SWAP_USING_OFFSET=y",
+                "CONFIG_ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE=y",
+                "0x08102000",
+                "STM32CubeProgrammer",
+            ],
+        }
+        for relative_path, expected_text in scripts.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in [
+                "nucleo_h563zi",
+                "zephyr.signed.hex",
+                "west was not found",
+                "Zephyr SDK was not found",
+                "MCUboot imgtool was not found",
+            ] + expected_text:
+                self.assertIn(text, contents, relative_path)
+
     def test_full_demo_bash_script_has_valid_syntax(self) -> None:
         bash = self._bash()
         if bash is None:
@@ -1522,6 +1604,7 @@ class ReleaseToolsTest(unittest.TestCase):
             "scripts/signed-image-demo.sh",
             "scripts/signed-image-demo-nucleo-h563zi.sh",
             "scripts/mcuboot-verify-nucleo-h563zi.sh",
+            "scripts/mcuboot-update-lifecycle-nucleo-h563zi.sh",
         ):
             result = subprocess.run(
                 [bash, "-n", str(REPO_ROOT / relative_path)],
@@ -1543,6 +1626,7 @@ class ReleaseToolsTest(unittest.TestCase):
             "scripts/signed-image-demo.ps1",
             "scripts/signed-image-demo-nucleo-h563zi.ps1",
             "scripts/mcuboot-verify-nucleo-h563zi.ps1",
+            "scripts/mcuboot-update-lifecycle-nucleo-h563zi.ps1",
         ):
             script = REPO_ROOT / relative_path
             command = (
@@ -1587,6 +1671,9 @@ class ReleaseToolsTest(unittest.TestCase):
                 "keys/dev-rsa-private.pem",
                 "keys/mcuboot-dev-rsa-2048.pem",
                 "keys/mcuboot-nucleo-h563zi-sysbuild.conf",
+                "keys/mcuboot-nucleo-h563zi-update-lifecycle-sysbuild.conf",
+                "keys/mcuboot-nucleo-h563zi-lifecycle-baseline.conf",
+                "keys/mcuboot-nucleo-h563zi-lifecycle-update.conf",
                 "dist/firmware-release/release-manifest.sig",
                 "dist/ota-sim/state.json",
             ],
@@ -1599,6 +1686,9 @@ class ReleaseToolsTest(unittest.TestCase):
         self.assertIn("keys/dev-rsa-private.pem", result.stdout)
         self.assertIn("keys/mcuboot-dev-rsa-2048.pem", result.stdout)
         self.assertIn("keys/mcuboot-nucleo-h563zi-sysbuild.conf", result.stdout)
+        self.assertIn("keys/mcuboot-nucleo-h563zi-update-lifecycle-sysbuild.conf", result.stdout)
+        self.assertIn("keys/mcuboot-nucleo-h563zi-lifecycle-baseline.conf", result.stdout)
+        self.assertIn("keys/mcuboot-nucleo-h563zi-lifecycle-update.conf", result.stdout)
         self.assertIn("dist/firmware-release/release-manifest.sig", result.stdout)
         self.assertIn("dist/ota-sim/state.json", result.stdout)
 

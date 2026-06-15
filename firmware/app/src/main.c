@@ -1,10 +1,20 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 #include <stdint.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <assureloop/release.h>
 #include <assureloop/telemetry.h>
+
+#if IS_ENABLED(CONFIG_ASSURELOOP_MCUBOOT_CONFIRM_ON_BOOT) || \
+    IS_ENABLED(CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT)
+#include <zephyr/dfu/mcuboot.h>
+#endif
+
+#if IS_ENABLED(CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT)
+#include <zephyr/sys/reboot.h>
+#endif
 
 LOG_MODULE_REGISTER(assureloop, LOG_LEVEL_INF);
 
@@ -17,6 +27,41 @@ BUILD_ASSERT(LOOP_ITERATIONS > 0, "loop iterations must be positive");
 static int64_t now_ns(void)
 {
     return (int64_t)k_ticks_to_ns_floor64(k_uptime_ticks());
+}
+
+static void assureloop_mcuboot_lifecycle_hook(void)
+{
+#if IS_ENABLED(CONFIG_ASSURELOOP_MCUBOOT_CONFIRM_ON_BOOT)
+    if (boot_is_img_confirmed()) {
+        LOG_INF("mcuboot_confirm status=already_confirmed");
+    } else {
+        int rc = boot_write_img_confirmed();
+
+        if (rc == 0) {
+            LOG_INF("mcuboot_confirm status=confirmed");
+        } else {
+            LOG_ERR("mcuboot_confirm status=failed rc=%d", rc);
+        }
+    }
+#endif
+
+#if IS_ENABLED(CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT)
+    {
+        const int mode = IS_ENABLED(CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_PERMANENT)
+            ? BOOT_UPGRADE_PERMANENT
+            : BOOT_UPGRADE_TEST;
+        int rc = boot_request_upgrade(mode);
+
+        LOG_INF("mcuboot_update_request mode=%s rc=%d",
+                mode == BOOT_UPGRADE_PERMANENT ? "permanent" : "test",
+                rc);
+
+        if (rc == 0) {
+            LOG_INF("mcuboot_update_request rebooting");
+            sys_reboot(SYS_REBOOT_COLD);
+        }
+    }
+#endif
 }
 
 int main(void)
@@ -32,6 +77,7 @@ int main(void)
 #endif
 
     assureloop_release_log_identity();
+    assureloop_mcuboot_lifecycle_hook();
     LOG_INF("loop_config period_ms=%d iterations=%d", LOOP_PERIOD_MS, LOOP_ITERATIONS);
 
     previous_ns = now_ns();
