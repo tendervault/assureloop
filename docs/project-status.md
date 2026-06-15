@@ -24,6 +24,8 @@ MCUboot-compatible signed application image for development verification.
 - Generates Zephyr SPDX SBOM output with `west spdx`.
 - Signs and verifies release manifests with local development keys.
 - Produces MCUboot-compatible signed image artifacts where Zephyr supports them.
+- Produces ST NUCLEO-H563ZI board-specific signed image evidence and update
+  packages for development verification.
 - Packages simulator update payloads and verifies downgrade, target, and tamper
   checks.
 - Simulates local OTA lifecycle states: staged, installed, confirmed, rollback,
@@ -49,6 +51,8 @@ support is added.
 The first physical validation target is ST NUCLEO-H563ZI. AL-013 manually
 validated build, flash, and COM4 serial logging for that board, but broad
 hardware support and hardware-backed update/rollback remain future work.
+AL-014 adds board-specific signed image evidence and package verification for
+that target using local development keys.
 
 ## Not Production-Ready Yet
 
@@ -84,10 +88,10 @@ must not be reused for production releases.
 | AL-011 | Done | Public alpha docs, full-demo wrappers, contributor quickstart, release checklist, and issue templates make the project easier to evaluate. |
 | AL-012 | Done | First hardware target selection recommends ST NUCLEO-H563ZI, names nRF52840 DK as backup, and defines board-readiness milestones. |
 | AL-013 | Done | ST NUCLEO-H563ZI manually builds, flashes, starts successfully, and emits the expected COM4 controller logs. |
+| AL-014 | Done | ST NUCLEO-H563ZI signed-image evidence produces SBOM-backed manifests, evidence bundles, and update packages with development keys. |
 
 ## Next Planned Milestones
 
-- AL-014: generate signed image evidence for ST NUCLEO-H563ZI.
 - AL-015: verify MCUboot boot behavior on ST NUCLEO-H563ZI.
 - AL-016: demonstrate local update and rollback behavior on ST NUCLEO-H563ZI
   if practical.

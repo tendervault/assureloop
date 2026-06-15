@@ -58,6 +58,17 @@ require_command() {
   fi
 }
 
+prepend_if_dir() {
+  local candidate="$1"
+  if [[ -d "${candidate}" ]]; then
+    PATH="${candidate}:${PATH}"
+    export PATH
+  fi
+}
+
+prepend_if_dir "/c/Program Files/CMake/bin"
+prepend_if_dir "/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja"
+
 require_command cmake "CMake was not found. Install CMake and make sure it is on PATH before building Zephyr."
 require_command ninja "Ninja was not found. Install Ninja and make sure it is on PATH before building Zephyr."
 

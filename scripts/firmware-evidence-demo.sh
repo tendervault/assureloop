@@ -10,6 +10,8 @@ PRODUCT="${ASSURELOOP_PRODUCT:-assureloop-controller-demo}"
 VERSION="${ASSURELOOP_VERSION:-0.1.0-dev}"
 TARGET="${ASSURELOOP_TARGET:-qemu_cortex_m3}"
 BUILD_PROFILE="${ASSURELOOP_BUILD_PROFILE:-dev}"
+TRACE_LOG="${ASSURELOOP_TRACE_LOG:-samples/logs/qemu_controller_boot.log}"
+EVIDENCE_NOTE="${ASSURELOOP_EVIDENCE_NOTE:-}"
 GENERATE_SBOM=0
 
 usage() {
@@ -18,7 +20,8 @@ usage: scripts/firmware-evidence-demo.sh [--generate-sbom]
 
 Environment overrides:
   PYTHON, WEST, BUILD_DIR, FIRMWARE_RELEASE_DIR, ASSURELOOP_PRODUCT,
-  ASSURELOOP_VERSION, ASSURELOOP_TARGET, ASSURELOOP_BUILD_PROFILE
+  ASSURELOOP_VERSION, ASSURELOOP_TARGET, ASSURELOOP_BUILD_PROFILE,
+  ASSURELOOP_TRACE_LOG, ASSURELOOP_EVIDENCE_NOTE
 EOF
 }
 
@@ -46,7 +49,7 @@ cd "${repo_root}"
 build_root="${BUILD_DIR%/}"
 zephyr_build="${build_root}/zephyr"
 if [[ ! -d "${zephyr_build}" ]]; then
-  echo "Zephyr build directory not found: ${zephyr_build}. Run 'west build -b qemu_cortex_m3 firmware/app' first." >&2
+  echo "Zephyr build directory not found: ${zephyr_build}. Run a Zephyr build for the target first." >&2
   exit 1
 fi
 
@@ -75,6 +78,7 @@ include_artifact "zephyr.signed.confirmed.bin" "firmware-signed-image" "true"
 include_artifact "zephyr.signed.confirmed.hex" "firmware-signed-image" "true"
 include_artifact "zephyr.elf" "firmware-elf" "true"
 include_artifact "zephyr.bin" "firmware-bin" "true"
+include_artifact "zephyr.hex" "firmware-hex" "true"
 include_artifact "zephyr.map" "firmware-map" "false"
 include_artifact ".config" "firmware-config" "false"
 include_artifact "zephyr.dts" "firmware-devicetree" "false"
@@ -90,14 +94,23 @@ if ((found_firmware_image == 0)); then
 fi
 
 if ((GENERATE_SBOM)); then
+  if command -v "${WEST}" >/dev/null 2>&1; then
+    west_cmd=("${WEST}")
+  elif [[ "${WEST}" == "west" ]] && "${PYTHON}" -m west --version >/dev/null 2>&1; then
+    west_cmd=("${PYTHON}" -m west)
+  else
+    echo "Zephyr SBOM generation failed: west was not found. Activate the Zephyr Python environment, set WEST, or make sure '${PYTHON} -m west' works." >&2
+    exit 1
+  fi
+
   echo "initializing Zephyr SPDX metadata in ${build_root}"
-  "${WEST}" spdx --init --build-dir "${build_root}"
+  "${west_cmd[@]}" spdx --init --build-dir "${build_root}"
 
   echo "refreshing existing Zephyr build metadata in ${build_root}"
-  "${WEST}" build -d "${build_root}" -c
+  "${west_cmd[@]}" build -d "${build_root}" -c
 
   echo "generating Zephyr SPDX/SBOM output in ${build_root}"
-  "${WEST}" spdx --build-dir "${build_root}"
+  "${west_cmd[@]}" spdx --build-dir "${build_root}"
 
   sbom_root="${build_root}/spdx"
   if [[ ! -d "${sbom_root}" ]]; then
@@ -134,28 +147,35 @@ signature="${OUTPUT_DIR}/release-manifest.sig"
 trace_report="${OUTPUT_DIR}/trace-report.json"
 evidence_bundle="${OUTPUT_DIR}/evidence-bundle"
 evidence_archive="${evidence_bundle}.tar.gz"
-trace_log="samples/logs/qemu_controller_boot.log"
 
-if [[ ! -f "${trace_log}" ]]; then
-  echo "QEMU trace sample not found: ${trace_log}" >&2
+if [[ ! -f "${TRACE_LOG}" ]]; then
+  echo "Trace log not found: ${TRACE_LOG}" >&2
   exit 1
 fi
 
 rm -f "${signature}"
+
+if [[ -z "${EVIDENCE_NOTE}" ]]; then
+  if [[ "${TARGET}" == "qemu_cortex_m3" ]]; then
+    EVIDENCE_NOTE="Simulator qemu_cortex_m3 firmware evidence bundle. Not a certification package."
+  else
+    EVIDENCE_NOTE="Firmware evidence bundle for ${TARGET}. Development evidence only; not a certification package."
+  fi
+fi
 
 "${PYTHON}" tools/generate_release_manifest.py \
   --product "${PRODUCT}" \
   --version "${VERSION}" \
   --target "${TARGET}" \
   --build-profile "${BUILD_PROFILE}" \
-  --note "Simulator qemu_cortex_m3 firmware evidence bundle. Not a certification package." \
+  --note "${EVIDENCE_NOTE}" \
   "${artifact_args[@]}" \
   --output "${manifest}"
 
 "${PYTHON}" tools/validate_manifest.py --manifest "${manifest}"
 
 "${PYTHON}" tools/generate_trace_report.py \
-  --input "${trace_log}" \
+  --input "${TRACE_LOG}" \
   --output "${trace_report}"
 
 rm -rf "${evidence_bundle}"

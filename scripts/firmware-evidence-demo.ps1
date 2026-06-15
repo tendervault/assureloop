@@ -12,6 +12,8 @@ param(
     [string] $Version = $(if ($env:ASSURELOOP_VERSION) { $env:ASSURELOOP_VERSION } else { "0.1.0-dev" }),
     [string] $Target = $(if ($env:ASSURELOOP_TARGET) { $env:ASSURELOOP_TARGET } else { "qemu_cortex_m3" }),
     [string] $BuildProfile = $(if ($env:ASSURELOOP_BUILD_PROFILE) { $env:ASSURELOOP_BUILD_PROFILE } else { "dev" }),
+    [string] $TraceLog = $(if ($env:ASSURELOOP_TRACE_LOG) { $env:ASSURELOOP_TRACE_LOG } else { "samples/logs/qemu_controller_boot.log" }),
+    [string] $EvidenceNote = $(if ($env:ASSURELOOP_EVIDENCE_NOTE) { $env:ASSURELOOP_EVIDENCE_NOTE } else { "" }),
     [switch] $GenerateSbom,
     [switch] $Sign
 )
@@ -76,6 +78,64 @@ function Resolve-OpenSsl {
     }
 }
 
+function Resolve-Tool {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Message
+    )
+
+    if (Test-Path -LiteralPath $Command -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $Command).Path
+    }
+
+    try {
+        return (Get-Command $Command -CommandType Application -ErrorAction Stop).Source
+    }
+    catch {
+        throw $Message
+    }
+}
+
+function Resolve-WestInvocation {
+    if ($West) {
+        if (Test-Path -LiteralPath $West -PathType Leaf) {
+            return @{
+                FilePath = (Resolve-Path -LiteralPath $West).Path
+                Prefix = @()
+            }
+        }
+
+        try {
+            return @{
+                FilePath = (Get-Command $West -CommandType Application -ErrorAction Stop).Source
+                Prefix = @()
+            }
+        }
+        catch {
+            if ($West -ne "west") {
+                throw "west was not found at '$West'. Activate the Zephyr Python environment or pass -West."
+            }
+        }
+    }
+
+    $PythonPath = Resolve-Tool `
+        -Command $Python `
+        -Message "Python was not found. Install Python or pass -Python."
+
+    & $PythonPath -m west --version *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "west was not found. Activate the Zephyr Python environment, install west, pass -West, or use '$Python -m west'."
+    }
+
+    return @{
+        FilePath = $PythonPath
+        Prefix = @("-m", "west")
+    }
+}
+
 function Find-SbomFiles {
     param(
         [Parameter(Mandatory = $true)]
@@ -125,7 +185,7 @@ try {
 
     $ZephyrBuild = Join-Path $BuildRoot "zephyr"
     if (-not (Test-Path -LiteralPath $ZephyrBuild -PathType Container)) {
-        throw "Zephyr build directory not found: $ZephyrBuild. Run 'west build -b qemu_cortex_m3 firmware/app' first."
+        throw "Zephyr build directory not found: $ZephyrBuild. Run a Zephyr build for the target first."
     }
 
     $ArtifactArgs = @()
@@ -138,6 +198,7 @@ try {
         @{ Name = "zephyr.signed.confirmed.hex"; Kind = "firmware-signed-image"; Firmware = $true },
         @{ Name = "zephyr.elf"; Kind = "firmware-elf"; Firmware = $true },
         @{ Name = "zephyr.bin"; Kind = "firmware-bin"; Firmware = $true },
+        @{ Name = "zephyr.hex"; Kind = "firmware-hex"; Firmware = $true },
         @{ Name = "zephyr.map"; Kind = "firmware-map"; Firmware = $false },
         @{ Name = ".config"; Kind = "firmware-config"; Firmware = $false },
         @{ Name = "zephyr.dts"; Kind = "firmware-devicetree"; Firmware = $false }
@@ -164,18 +225,22 @@ try {
     }
 
     if ($GenerateSbom) {
+        $WestInvocation = Resolve-WestInvocation
+        $WestFile = [string] $WestInvocation.FilePath
+        $WestPrefix = [string[]] $WestInvocation.Prefix
+
         try {
             Write-Host "initializing Zephyr SPDX metadata in $BuildDirForWest"
-            Invoke-Checked -FilePath $West -Arguments @("spdx", "--init", "--build-dir", $BuildDirForWest)
+            Invoke-Checked -FilePath $WestFile -Arguments ($WestPrefix + @("spdx", "--init", "--build-dir", $BuildDirForWest))
 
             Write-Host "refreshing existing Zephyr build metadata in $BuildDirForWest"
-            Invoke-Checked -FilePath $West -Arguments @("build", "-d", $BuildDirForWest, "-c")
+            Invoke-Checked -FilePath $WestFile -Arguments ($WestPrefix + @("build", "-d", $BuildDirForWest, "-c"))
 
             Write-Host "generating Zephyr SPDX/SBOM output in $BuildDirForWest"
-            Invoke-Checked -FilePath $West -Arguments @("spdx", "--build-dir", $BuildDirForWest)
+            Invoke-Checked -FilePath $WestFile -Arguments ($WestPrefix + @("spdx", "--build-dir", $BuildDirForWest))
         }
         catch {
-            throw "Zephyr SBOM generation failed. Ensure west is on PATH, the existing build directory is valid, and Zephyr Python dependencies are installed. Underlying error: $($_.Exception.Message)"
+            throw "Zephyr SBOM generation failed. Ensure west is available, '$Python -m west' works, the existing build directory is valid, and Zephyr Python dependencies are installed. Underlying error: $($_.Exception.Message)"
         }
 
         $SbomRoot = Join-Path $BuildRoot "spdx"
@@ -198,14 +263,29 @@ try {
     $TraceReport = Join-Path $OutputDir "trace-report.json"
     $EvidenceBundle = Join-Path $OutputDir "evidence-bundle"
     $EvidenceArchive = "$EvidenceBundle.tar.gz"
-    $TraceLog = "samples/logs/qemu_controller_boot.log"
+    $TraceLogPath = if ([System.IO.Path]::IsPathRooted($TraceLog)) {
+        [System.IO.Path]::GetFullPath($TraceLog)
+    }
+    else {
+        [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $TraceLog))
+    }
 
-    if (-not (Test-Path -LiteralPath $TraceLog -PathType Leaf)) {
-        throw "QEMU trace sample not found: $TraceLog"
+    if (-not (Test-Path -LiteralPath $TraceLogPath -PathType Leaf)) {
+        throw "Trace log not found: $TraceLogPath"
     }
 
     if (-not $Sign) {
         Remove-Item -LiteralPath $Signature -Force -ErrorAction SilentlyContinue
+    }
+
+    $ManifestNote = if ($EvidenceNote) {
+        $EvidenceNote
+    }
+    elseif ($Target -eq "qemu_cortex_m3") {
+        "Simulator qemu_cortex_m3 firmware evidence bundle. Not a certification package."
+    }
+    else {
+        "Firmware evidence bundle for $Target. Development evidence only; not a certification package."
     }
 
     $ManifestArgs = @(
@@ -214,7 +294,7 @@ try {
         "--version", $Version,
         "--target", $Target,
         "--build-profile", $BuildProfile,
-        "--note", "Simulator qemu_cortex_m3 firmware evidence bundle. Not a certification package."
+        "--note", $ManifestNote
     )
     $ManifestArgs += $ArtifactArgs
     $ManifestArgs += @("--output", $Manifest)
@@ -256,7 +336,7 @@ try {
 
     Invoke-Checked -FilePath $Python -Arguments @(
         "tools/generate_trace_report.py",
-        "--input", $TraceLog,
+        "--input", $TraceLogPath,
         "--output", $TraceReport
     )
 

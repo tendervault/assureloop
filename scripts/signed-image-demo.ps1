@@ -10,7 +10,12 @@ param(
     [string] $KeysDir = $(if ($env:ASSURELOOP_KEYS_DIR) { $env:ASSURELOOP_KEYS_DIR } else { "keys" }),
     [string] $KeyFile = $(if ($env:ASSURELOOP_MCUBOOT_KEY) { $env:ASSURELOOP_MCUBOOT_KEY } else { "" }),
     [string] $Board = $(if ($env:ASSURELOOP_SIGNED_IMAGE_BOARD) { $env:ASSURELOOP_SIGNED_IMAGE_BOARD } else { "qemu_cortex_m3" }),
-    [string] $Overlay = $(if ($env:ASSURELOOP_SIGNED_IMAGE_OVERLAY) { $env:ASSURELOOP_SIGNED_IMAGE_OVERLAY } else { "firmware/app/overlays/qemu_cortex_m3_mcuboot.overlay" })
+    [string] $Target = $(if ($env:ASSURELOOP_TARGET) { $env:ASSURELOOP_TARGET } else { $Board }),
+    [string] $TraceLog = $(if ($env:ASSURELOOP_TRACE_LOG) { $env:ASSURELOOP_TRACE_LOG } else { "samples/logs/qemu_controller_boot.log" }),
+    [string] $EvidenceNote = $(if ($env:ASSURELOOP_EVIDENCE_NOTE) { $env:ASSURELOOP_EVIDENCE_NOTE } else { "" }),
+    [string] $Overlay = $(if ($env:ASSURELOOP_SIGNED_IMAGE_OVERLAY) { $env:ASSURELOOP_SIGNED_IMAGE_OVERLAY } else { "firmware/app/overlays/qemu_cortex_m3_mcuboot.overlay" }),
+    [switch] $GenerateSbom,
+    [switch] $Flash
 )
 
 Set-StrictMode -Version Latest
@@ -51,6 +56,43 @@ function Resolve-Tool {
     }
     catch {
         throw $Message
+    }
+}
+
+function Resolve-WestInvocation {
+    if ($West) {
+        if (Test-Path -LiteralPath $West -PathType Leaf) {
+            return @{
+                FilePath = (Resolve-Path -LiteralPath $West).Path
+                Prefix = @()
+            }
+        }
+
+        try {
+            return @{
+                FilePath = (Get-Command $West -CommandType Application -ErrorAction Stop).Source
+                Prefix = @()
+            }
+        }
+        catch {
+            if ($West -ne "west") {
+                throw "west was not found at '$West'. Activate the Zephyr Python environment or pass -West."
+            }
+        }
+    }
+
+    $PythonPath = Resolve-Tool `
+        -Command $Python `
+        -Message "Python was not found. Install Python or pass -Python."
+
+    & $PythonPath -m west --version *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "west was not found. Activate the Zephyr Python environment, install west, pass -West, or use '$Python -m west'."
+    }
+
+    return @{
+        FilePath = $PythonPath
+        Prefix = @("-m", "west")
     }
 }
 
@@ -97,6 +139,32 @@ function Resolve-Imgtool {
     }
 }
 
+function Resolve-ImgtoolScriptForCMake {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable] $Tool
+    )
+
+    $Candidates = @()
+    if ($Tool.FilePath -like "*.py") {
+        $Candidates += [string] $Tool.FilePath
+    }
+
+    $Candidates += Join-Path $RepoRoot "../bootloader/mcuboot/scripts/imgtool.py"
+    if ($env:ZEPHYR_BASE) {
+        $WorkspaceRoot = Split-Path -Parent $env:ZEPHYR_BASE
+        $Candidates += Join-Path $WorkspaceRoot "bootloader/mcuboot/scripts/imgtool.py"
+    }
+
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $Candidate).Path
+        }
+    }
+
+    throw "MCUboot imgtool.py was not found for Zephyr signing. Add the MCUboot module to the Zephyr workspace or pass -Imgtool with the path to imgtool.py."
+}
+
 function Invoke-Imgtool {
     param(
         [Parameter(Mandatory = $true)]
@@ -117,8 +185,12 @@ function Invoke-Imgtool {
 
 Push-Location -LiteralPath $RepoRoot
 try {
-    $WestPath = Resolve-Tool -Command $West -Message "west was not found. Activate the Zephyr Python environment or pass -West."
+    $WestInvocation = Resolve-WestInvocation
+    $WestFile = [string] $WestInvocation.FilePath
+    $WestPrefix = [string[]] $WestInvocation.Prefix
+    $WestForEvidence = if ($WestPrefix.Count -eq 0) { $WestFile } else { $West }
     $ImgtoolCommand = Resolve-Imgtool -Command $Imgtool
+    $ImgtoolScript = Resolve-ImgtoolScriptForCMake -Tool $ImgtoolCommand
 
     $KeysRoot = if ([System.IO.Path]::IsPathRooted($KeysDir)) {
         [System.IO.Path]::GetFullPath($KeysDir)
@@ -150,23 +222,10 @@ try {
         Write-Host "development MCUboot key only; do not use for production"
     }
 
-    $OverlayPath = if ([System.IO.Path]::IsPathRooted($Overlay)) {
-        [System.IO.Path]::GetFullPath($Overlay)
-    }
-    else {
-        [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $Overlay))
-    }
-
-    if (-not (Test-Path -LiteralPath $OverlayPath -PathType Leaf)) {
-        throw "signed-image overlay not found: $OverlayPath"
-    }
-
     $KeyForCMake = $SigningKey.Replace("\", "/")
-    $OverlayForCMake = $OverlayPath.Replace("\", "/")
     $KeyArgument = '-DCONFIG_MCUBOOT_SIGNATURE_KEY_FILE:STRING="' + $KeyForCMake + '"'
-    $OverlayArgument = "-DEXTRA_DTC_OVERLAY_FILE=$OverlayForCMake"
-
-    Invoke-Checked -FilePath $WestPath -Arguments @(
+    $ImgtoolForCMake = $ImgtoolScript.Replace("\", "/")
+    $BuildArguments = @(
         "build",
         "-p", "always",
         "-b", $Board,
@@ -175,9 +234,27 @@ try {
         "--",
         "-DCONFIG_BOOTLOADER_MCUBOOT=y",
         "-DCONFIG_BUILD_OUTPUT_BIN=y",
-        $KeyArgument,
-        $OverlayArgument
+        "-DIMGTOOL:FILEPATH=$ImgtoolForCMake",
+        $KeyArgument
     )
+
+    if ($Overlay) {
+        $OverlayPath = if ([System.IO.Path]::IsPathRooted($Overlay)) {
+            [System.IO.Path]::GetFullPath($Overlay)
+        }
+        else {
+            [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $Overlay))
+        }
+
+        if (-not (Test-Path -LiteralPath $OverlayPath -PathType Leaf)) {
+            throw "signed-image overlay not found: $OverlayPath"
+        }
+
+        $OverlayForCMake = $OverlayPath.Replace("\", "/")
+        $BuildArguments += "-DEXTRA_DTC_OVERLAY_FILE=$OverlayForCMake"
+    }
+
+    Invoke-Checked -FilePath $WestFile -Arguments ($WestPrefix + $BuildArguments)
 
     $BuildRoot = if ([System.IO.Path]::IsPathRooted($BuildDir)) {
         [System.IO.Path]::GetFullPath($BuildDir)
@@ -212,11 +289,22 @@ try {
         )
     }
 
-    & (Join-Path $PSScriptRoot "firmware-evidence-demo.ps1") `
-        -Python $Python `
-        -West $WestPath `
-        -BuildDir $BuildDir `
-        -OutputDir $OutputDir
+    $EvidenceParams = @{
+        Python = $Python
+        West = $WestForEvidence
+        BuildDir = $BuildDir
+        OutputDir = $OutputDir
+        Target = $Target
+        TraceLog = $TraceLog
+    }
+    if ($EvidenceNote) {
+        $EvidenceParams.EvidenceNote = $EvidenceNote
+    }
+    if ($GenerateSbom) {
+        $EvidenceParams.GenerateSbom = $true
+    }
+
+    & (Join-Path $PSScriptRoot "firmware-evidence-demo.ps1") @EvidenceParams
     if ($LASTEXITCODE -ne 0) {
         throw "firmware-evidence-demo.ps1 failed with exit code $LASTEXITCODE"
     }
@@ -237,6 +325,14 @@ try {
         "--package", $UpdatePackage,
         "--target", $Board
     )
+
+    if ($Flash) {
+        Invoke-Checked -FilePath $WestFile -Arguments ($WestPrefix + @(
+            "flash",
+            "-d", $BuildDir
+        ))
+        Write-Host "flash complete. This programs the signed application image only; AL-015 will verify MCUboot bootloader behavior."
+    }
 }
 finally {
     Pop-Location

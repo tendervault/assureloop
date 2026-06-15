@@ -157,6 +157,7 @@ Clean generated output on Windows:
 - [Release assurance flow](docs/release-assurance-flow.md)
 - [Hardware target selection](docs/hardware-target-selection.md)
 - [ST NUCLEO-H563ZI bring-up](docs/nucleo-h563zi-bringup.md)
+- [ST NUCLEO-H563ZI signed evidence](docs/nucleo-h563zi-signed-evidence.md)
 - [Contributor quickstart](docs/contributor-quickstart.md)
 - [Release checklist](docs/release-checklist.md)
 - [Architecture](docs/architecture.md)

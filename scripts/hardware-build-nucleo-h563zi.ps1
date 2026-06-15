@@ -13,6 +13,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$OriginalPath = $env:PATH
 
 function Invoke-Checked {
     param(
@@ -67,6 +68,17 @@ function Assert-ToolAvailable {
     }
 }
 
+function Add-DirectoryToPathIfExists {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $env:PATH = "$Path;$env:PATH"
+    }
+}
+
 function Resolve-WestInvocation {
     if ($West) {
         $WestPath = Resolve-Tool `
@@ -103,6 +115,9 @@ function Resolve-WestInvocation {
 
 Push-Location -LiteralPath $RepoRoot
 try {
+    Add-DirectoryToPathIfExists -Path "C:\Program Files\CMake\bin"
+    Add-DirectoryToPathIfExists -Path "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
+
     Assert-ToolAvailable `
         -Command "cmake" `
         -Message "CMake was not found. Install CMake and make sure it is on PATH before building Zephyr."
@@ -136,5 +151,6 @@ try {
     }
 }
 finally {
+    $env:PATH = $OriginalPath
     Pop-Location
 }

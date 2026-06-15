@@ -479,6 +479,38 @@ class ReleaseToolsTest(unittest.TestCase):
             self.assertEqual(data["jitter_ns"]["max"], 10000000)
             self.assertIn("loop_summary", data["summary_line"])
 
+    def test_nucleo_h563zi_trace_report_sample(self) -> None:
+        sample = REPO_ROOT / "samples/logs/nucleo_h563zi_boot.log"
+        contents = sample.read_text(encoding="utf-8")
+        for text in [
+            "AssureLoop controller demo booting",
+            "release product=assureloop-controller-demo",
+            "loop_config period_ms=100 iterations=20",
+            "loop iteration=20",
+            "loop_summary iterations=20",
+            "AssureLoop controller demo complete",
+        ]:
+            self.assertIn(text, contents)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "nucleo-trace.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools/generate_trace_report.py"),
+                    "--input",
+                    str(sample),
+                    "--output",
+                    str(out),
+                ],
+                check=True,
+            )
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["samples"], 20)
+            self.assertEqual(data["jitter_ns"]["min"], 100000)
+            self.assertEqual(data["jitter_ns"]["max"], 100000)
+            self.assertIn("loop_summary", data["summary_line"])
+
     def test_firmware_evidence_script_with_sample_build_outputs(self) -> None:
         powershell = self._powershell()
         if powershell is None:
@@ -564,8 +596,10 @@ class ReleaseToolsTest(unittest.TestCase):
 
             artifacts = {
                 "zephyr.signed.bin": b"fake-signed-image",
+                "zephyr.signed.hex": b"fake-signed-hex",
                 "zephyr.elf": b"fake-zephyr-elf",
                 "zephyr.bin": b"fake-zephyr-bin",
+                "zephyr.hex": b"fake-zephyr-hex",
             }
             for filename, contents in artifacts.items():
                 (zephyr_build / filename).write_bytes(contents)
@@ -595,6 +629,8 @@ class ReleaseToolsTest(unittest.TestCase):
             by_name = {Path(item["path"]).name: item for item in manifest["artifacts"]}
 
             self.assertEqual(by_name["zephyr.signed.bin"]["kind"], "firmware-signed-image")
+            self.assertEqual(by_name["zephyr.signed.hex"]["kind"], "firmware-signed-image")
+            self.assertEqual(by_name["zephyr.hex"]["kind"], "firmware-hex")
             self.assertEqual(
                 by_name["zephyr.signed.bin"]["sha256"],
                 hashlib.sha256(artifacts["zephyr.signed.bin"]).hexdigest(),
@@ -1273,6 +1309,15 @@ class ReleaseToolsTest(unittest.TestCase):
                 "STM32CubeProgrammer",
                 "AssureLoop controller demo booting",
             ],
+            "docs/nucleo-h563zi-signed-evidence.md": [
+                "nucleo_h563zi",
+                "signed image",
+                "SBOM",
+                "evidence bundle",
+                "update package",
+                "development key",
+                "not a certification claim",
+            ],
             "docs/release-assurance-flow.md": [
                 "Zephyr build",
                 "release-manifest.json",
@@ -1354,6 +1399,48 @@ class ReleaseToolsTest(unittest.TestCase):
             ] + expected_text:
                 self.assertIn(text, contents, relative_path)
 
+    def test_nucleo_h563zi_signed_evidence_scripts_and_docs_are_present(self) -> None:
+        docs = (REPO_ROOT / "docs/nucleo-h563zi-signed-evidence.md").read_text(
+            encoding="utf-8"
+        )
+        for text in [
+            "build-signed-nucleo-h563zi",
+            "dist/firmware-nucleo-h563zi-release",
+            "zephyr.signed.bin",
+            "zephyr.signed.hex",
+            "firmware-signed-image",
+            "verify_evidence_bundle.py",
+            "verify_update_package.py",
+            "local development image-signing keys",
+            "not a production secure-boot validation",
+        ]:
+            self.assertIn(text, docs)
+
+        scripts = {
+            "scripts/signed-image-demo-nucleo-h563zi.ps1": [
+                "-Flash",
+                "-GenerateSbom",
+                "build-signed-nucleo-h563zi",
+                "dist/firmware-nucleo-h563zi-release",
+                "nucleo_h563zi",
+                "Zephyr SDK was not found",
+            ],
+            "scripts/signed-image-demo-nucleo-h563zi.sh": [
+                "--flash",
+                "--generate-sbom",
+                "build-signed-nucleo-h563zi",
+                "dist/firmware-nucleo-h563zi-release",
+                "nucleo_h563zi",
+                "Zephyr SDK was not found",
+            ],
+        }
+        for relative_path, expected_text in scripts.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in expected_text:
+                self.assertIn(text, contents, relative_path)
+
     def test_full_demo_bash_script_has_valid_syntax(self) -> None:
         bash = self._bash()
         if bash is None:
@@ -1362,6 +1449,8 @@ class ReleaseToolsTest(unittest.TestCase):
         for relative_path in (
             "scripts/full-demo.sh",
             "scripts/hardware-build-nucleo-h563zi.sh",
+            "scripts/signed-image-demo.sh",
+            "scripts/signed-image-demo-nucleo-h563zi.sh",
         ):
             result = subprocess.run(
                 [bash, "-n", str(REPO_ROOT / relative_path)],
@@ -1380,6 +1469,8 @@ class ReleaseToolsTest(unittest.TestCase):
         for relative_path in (
             "scripts/full-demo.ps1",
             "scripts/hardware-build-nucleo-h563zi.ps1",
+            "scripts/signed-image-demo.ps1",
+            "scripts/signed-image-demo-nucleo-h563zi.ps1",
         ):
             script = REPO_ROOT / relative_path
             command = (
