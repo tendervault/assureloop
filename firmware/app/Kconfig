@@ -22,6 +22,14 @@ config ASSURELOOP_ENABLE_STARTUP_BANNER
   bool "Emit startup banner"
   default y
 
+config ASSURELOOP_LIFECYCLE_ROLE
+  string "Lifecycle role label"
+  default ""
+  help
+    Optional development-only role label printed at boot. This is used by
+    controlled MCUboot lifecycle fixtures to distinguish baseline and update
+    images in serial logs.
+
 config ASSURELOOP_MCUBOOT_CONFIRM_ON_BOOT
   bool "Confirm the active MCUboot image on boot"
   depends on BOOTLOADER_MCUBOOT && MCUBOOT_IMG_MANAGER
@@ -45,6 +53,16 @@ config ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_PERMANENT
   help
     Request a permanent upgrade instead of a test upgrade. Leave disabled
     when investigating rollback behavior.
+
+config ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ONCE
+  bool "Request MCUboot upgrade only once"
+  depends on ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT
+  depends on FLASH && FLASH_MAP && FLASH_PAGE_LAYOUT
+  default n
+  help
+    Record a small marker in the storage partition before rebooting so the
+    baseline lifecycle fixture does not repeatedly request the same staged
+    secondary-slot image after rollback.
 
 config ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE
   bool "Build NUCLEO-H563ZI secondary-slot update image"

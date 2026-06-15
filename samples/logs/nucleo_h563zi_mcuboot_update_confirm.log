@@ -1,0 +1,36 @@
+*** Booting MCUboot ee39e2d694bd ***
+*** Using Zephyr OS build 684c9e8f32e4 ***
+I: Starting bootloader
+I: Image index: 0, Swap type: test
+I: Primary image: magic=unset, swap_type=0x1, copy_done=0x3, image_ok=0x3
+I: Secondary image: magic=good, swap_type=0x2, copy_done=0x3, image_ok=0x3
+I: Starting swap using offset algorithm.
+I: Image index: 0, Swap type: revert
+I: Bootloader chainload address offset: 0x10000
+I: Image version: v0.1.1
+I: Jumping to the first image slot
+*** Booting Zephyr OS build 684c9e8f32e4 ***
+[00:00:00.000,000] <inf> assureloop: AssureLoop controller demo booting
+[00:00:00.000,000] <inf> assureloop_release: release product=assureloop-controller-demo version=0.1.1-dev profile=dev git_sha=unknown
+[00:00:00.000,000] <inf> assureloop: lifecycle_role=update-confirm
+[00:00:00.000,000] <inf> assureloop: mcuboot_confirm status=confirmed
+[00:00:00.000,000] <inf> assureloop: loop_config period_ms=100 iterations=20
+[00:00:02.002,000] <inf> assureloop: loop_summary iterations=20 min_jitter_ns=100000 max_jitter_ns=100000 avg_abs_jitter_ns=100000
+[00:00:02.002,000] <inf> assureloop: AssureLoop controller demo complete
+
+*** Booting MCUboot ee39e2d694bd ***
+*** Using Zephyr OS build 684c9e8f32e4 ***
+I: Starting bootloader
+I: Image index: 0, Swap type: none
+I: Primary image: magic=good, swap_type=0x2, copy_done=0x1, image_ok=0x1
+I: Secondary image: magic=unset, swap_type=0x1, copy_done=0x3, image_ok=0x3
+I: Bootloader chainload address offset: 0x10000
+I: Image version: v0.1.1
+I: Jumping to the first image slot
+*** Booting Zephyr OS build 684c9e8f32e4 ***
+[00:00:00.000,000] <inf> assureloop: AssureLoop controller demo booting
+[00:00:00.000,000] <inf> assureloop_release: release product=assureloop-controller-demo version=0.1.1-dev profile=dev git_sha=unknown
+[00:00:00.000,000] <inf> assureloop: lifecycle_role=update-confirm
+[00:00:00.000,000] <inf> assureloop: mcuboot_confirm status=already_confirmed
+[00:00:02.002,000] <inf> assureloop: loop_summary iterations=20 min_jitter_ns=100000 max_jitter_ns=100000 avg_abs_jitter_ns=100000
+[00:00:02.002,000] <inf> assureloop: AssureLoop controller demo complete

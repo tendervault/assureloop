@@ -17,12 +17,15 @@ UPDATE_VERSION="0.1.1-dev"
 BASELINE_IMAGE_VERSION="0.1.0+0"
 UPDATE_IMAGE_VERSION="0.1.1+0"
 CONFIRM_UPDATE=0
+NO_CONFIRM_UPDATE=0
 PERMANENT_UPGRADE=0
+FLASH_BASELINE=0
+FLASH_UPDATE=0
 FLASH=0
 
 usage() {
   cat <<'EOF'
-usage: scripts/mcuboot-update-lifecycle-nucleo-h563zi.sh [--flash] [--confirm-update] [--permanent-upgrade]
+usage: scripts/mcuboot-update-lifecycle-nucleo-h563zi.sh [--flash-baseline] [--flash-update] [--confirm-update|--no-confirm-update]
 
 Builds a swap-using-offset MCUboot baseline image and a secondary-slot
 AssureLoop update image for ST NUCLEO-H563ZI. Flashing is skipped unless
@@ -30,7 +33,10 @@ AssureLoop update image for ST NUCLEO-H563ZI. Flashing is skipped unless
 
 Options:
   --flash                         Flash the secondary update image, then baseline MCUboot/app
+  --flash-baseline                Flash baseline MCUboot/app only
+  --flash-update                  Flash secondary-slot update image only
   --confirm-update                Build the update image to confirm itself on first boot
+  --no-confirm-update             Build the update image for rollback validation
   --permanent-upgrade             Baseline requests a permanent upgrade instead of test upgrade
   --baseline-version <version>    Release version printed by the baseline app
   --update-version <version>      Release version printed by the update app
@@ -51,8 +57,20 @@ while (($#)); do
       FLASH=1
       shift
       ;;
+    --flash-baseline)
+      FLASH_BASELINE=1
+      shift
+      ;;
+    --flash-update)
+      FLASH_UPDATE=1
+      shift
+      ;;
     --confirm-update)
       CONFIRM_UPDATE=1
+      shift
+      ;;
+    --no-confirm-update)
+      NO_CONFIRM_UPDATE=1
       shift
       ;;
     --permanent-upgrade)
@@ -86,6 +104,16 @@ while (($#)); do
       ;;
   esac
 done
+
+if ((CONFIRM_UPDATE && NO_CONFIRM_UPDATE)); then
+  echo "use either --confirm-update or --no-confirm-update, not both" >&2
+  exit 2
+fi
+
+if ((FLASH)); then
+  FLASH_BASELINE=1
+  FLASH_UPDATE=1
+fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "${repo_root}"
@@ -148,7 +176,7 @@ fi
 export ZEPHYR_SDK_INSTALL_DIR
 export ZEPHYR_TOOLCHAIN_VARIANT="${ZEPHYR_TOOLCHAIN_VARIANT:-zephyr}"
 
-if ((FLASH)); then
+if ((FLASH_BASELINE || FLASH_UPDATE)); then
   require_command STM32_Programmer_CLI "STM32CubeProgrammer CLI was not found. Install STM32CubeProgrammer v2.22.0 or add its bin directory to PATH before flashing."
 fi
 
@@ -213,6 +241,12 @@ to_cmake_path() {
 
 key_for_cmake="$(to_cmake_path "${signing_key}")"
 imgtool_for_cmake="$(to_cmake_path "${imgtool_script}")"
+BASELINE_ROLE="baseline"
+if ((CONFIRM_UPDATE)); then
+  UPDATE_ROLE="update-confirm"
+else
+  UPDATE_ROLE="update-rollback"
+fi
 
 sysbuild_conf="${KEYS_DIR}/mcuboot-nucleo-h563zi-update-lifecycle-sysbuild.conf"
 cat >"${sysbuild_conf}" <<EOF
@@ -228,6 +262,7 @@ cat >"${baseline_app_conf}" <<EOF
 # SPDX-License-Identifier: Apache-2.0
 # Generated baseline app config for local MCUboot update lifecycle investigation.
 CONFIG_FLASH=y
+CONFIG_FLASH_PAGE_LAYOUT=y
 CONFIG_FLASH_MAP=y
 CONFIG_STREAM_FLASH=y
 CONFIG_IMG_MANAGER=y
@@ -235,7 +270,9 @@ CONFIG_MCUBOOT_IMG_MANAGER=y
 CONFIG_REBOOT=y
 CONFIG_BUILD_OUTPUT_BIN=y
 CONFIG_BUILD_OUTPUT_HEX=y
+CONFIG_ASSURELOOP_LIFECYCLE_ROLE="${BASELINE_ROLE}"
 CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT=y
+CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ONCE=y
 CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION="${BASELINE_IMAGE_VERSION}"
 EOF
 if ((PERMANENT_UPGRADE)); then
@@ -248,6 +285,7 @@ cat >"${update_app_conf}" <<EOF
 # Generated update app config for local MCUboot update lifecycle investigation.
 CONFIG_BOOTLOADER_MCUBOOT=y
 CONFIG_FLASH=y
+CONFIG_FLASH_PAGE_LAYOUT=y
 CONFIG_FLASH_MAP=y
 CONFIG_STREAM_FLASH=y
 CONFIG_IMG_MANAGER=y
@@ -257,6 +295,7 @@ CONFIG_BUILD_OUTPUT_HEX=y
 CONFIG_MCUBOOT_BOOTLOADER_MODE_OVERWRITE_ONLY=n
 CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET=y
 CONFIG_MCUBOOT_BOOTLOADER_NO_DOWNGRADE=y
+CONFIG_ASSURELOOP_LIFECYCLE_ROLE="${UPDATE_ROLE}"
 CONFIG_ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE=y
 CONFIG_MCUBOOT_SIGNATURE_KEY_FILE="${key_for_cmake}"
 CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION="${UPDATE_IMAGE_VERSION}"
@@ -298,11 +337,14 @@ echo "secondary slot address: 0x08100000"
 echo "secondary update image start: 0x08102000"
 echo "baseline release version: ${BASELINE_VERSION} image version: ${BASELINE_IMAGE_VERSION}"
 echo "update release version: ${UPDATE_VERSION} image version: ${UPDATE_IMAGE_VERSION}"
+echo "baseline lifecycle role: ${BASELINE_ROLE}"
+echo "update lifecycle role: ${UPDATE_ROLE}"
 if ((PERMANENT_UPGRADE)); then
   echo "baseline upgrade request mode: permanent"
 else
   echo "baseline upgrade request mode: test"
 fi
+echo "baseline upgrade request guard: one-shot storage marker"
 if ((CONFIRM_UPDATE)); then
   echo "update auto-confirm: enabled"
 else
@@ -328,16 +370,24 @@ find "${UPDATE_BUILD_DIR}/zephyr" -maxdepth 1 -type f \( \
   -name 'zephyr.signed.bin' -o -name 'zephyr.signed.hex' \
 \) -print | sort | sed 's/^/secondary-slot update artifact: /'
 
-if ((FLASH)); then
-  STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst -d "${update_signed_hex}" -v -rst
-  echo "secondary update image flashed from ${update_signed_hex}"
+if ((FLASH_BASELINE || FLASH_UPDATE)); then
+  if ((FLASH_UPDATE)); then
+    STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst -d "${update_signed_hex}" -v -rst
+    echo "secondary update image flashed from ${update_signed_hex}"
+  fi
 
-  "${west_cmd[@]}" flash -d "${BASELINE_BUILD_DIR}"
-  echo "baseline bootloader and primary app flashed. The baseline app will request the staged update on boot."
+  if ((FLASH_BASELINE)); then
+    "${west_cmd[@]}" flash -d "${BASELINE_BUILD_DIR}"
+    echo "baseline bootloader and primary app flashed."
+  fi
+
+  if ((FLASH_BASELINE && FLASH_UPDATE)); then
+    echo "the staged update was programmed before baseline flash so the baseline's first boot can request it once."
+  fi
   echo "Capture serial logs with: ${PYTHON} -m serial.tools.miniterm ${SERIAL_PORT} ${BAUD}"
-  echo "Expected lifecycle logs include MCUboot swap output, release version=${UPDATE_VERSION}, and loop_summary."
+  echo "Expected lifecycle logs include lifecycle_role=${BASELINE_ROLE}, mcuboot_update_request_once marker=written, MCUboot swap output, release version=${UPDATE_VERSION}, lifecycle_role=${UPDATE_ROLE}, and loop_summary."
 else
-  echo "flash skipped. Re-run with --flash to program a connected ST NUCLEO-H563ZI."
+  echo "flash skipped. Re-run with --flash-baseline, --flash-update, or --flash to program a connected ST NUCLEO-H563ZI."
   echo "With --flash, the script flashes the secondary update image before the baseline image."
   echo "Capture serial logs with: ${PYTHON} -m serial.tools.miniterm ${SERIAL_PORT} ${BAUD}"
 fi

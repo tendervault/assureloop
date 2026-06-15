@@ -1534,7 +1534,14 @@ class ReleaseToolsTest(unittest.TestCase):
             "rollback",
             "downgrade",
             "tamper",
-            "Status: partial, blocker documented",
+            "baseline",
+            "update-rollback",
+            "Controlled Test Matrix",
+            "one-shot marker",
+            "What Has Been Proven",
+            "Verified on physical ST NUCLEO-H563ZI hardware",
+            "nucleo_h563zi_mcuboot_update_confirm.log",
+            "nucleo_h563zi_mcuboot_update_rollback.log",
             "not production OTA",
         ]:
             self.assertIn(text, docs)
@@ -1542,8 +1549,10 @@ class ReleaseToolsTest(unittest.TestCase):
         kconfig = (REPO_ROOT / "firmware/app/Kconfig").read_text(encoding="utf-8")
         for text in [
             "ASSURELOOP_MCUBOOT_CONFIRM_ON_BOOT",
+            "ASSURELOOP_LIFECYCLE_ROLE",
             "ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT",
             "ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_PERMANENT",
+            "ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ONCE",
             "ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE",
             "BUILD_OUTPUT_ADJUST_LMA",
         ]:
@@ -1553,6 +1562,10 @@ class ReleaseToolsTest(unittest.TestCase):
         for text in [
             "boot_write_img_confirmed",
             "boot_request_upgrade",
+            "boot_read_bank_header",
+            "assureloop_lifecycle_request_marker_write",
+            "lifecycle_role",
+            "marker=present",
             "mcuboot_update_request",
             "mcuboot_confirm",
         ]:
@@ -1561,20 +1574,30 @@ class ReleaseToolsTest(unittest.TestCase):
         scripts = {
             "scripts/mcuboot-update-lifecycle-nucleo-h563zi.ps1": [
                 "-Flash",
+                "-FlashBaseline",
+                "-FlashUpdate",
                 "-ConfirmUpdate",
+                "-NoConfirmUpdate",
                 "build-mcuboot-lifecycle-nucleo-h563zi-baseline",
                 "build-mcuboot-lifecycle-nucleo-h563zi-update",
                 "SB_CONFIG_MCUBOOT_MODE_SWAP_USING_OFFSET=y",
+                "CONFIG_ASSURELOOP_LIFECYCLE_ROLE",
+                "CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ONCE=y",
                 "CONFIG_ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE=y",
                 "0x08102000",
                 "STM32CubeProgrammer",
             ],
             "scripts/mcuboot-update-lifecycle-nucleo-h563zi.sh": [
                 "--flash",
+                "--flash-baseline",
+                "--flash-update",
                 "--confirm-update",
+                "--no-confirm-update",
                 "build-mcuboot-lifecycle-nucleo-h563zi-baseline",
                 "build-mcuboot-lifecycle-nucleo-h563zi-update",
                 "SB_CONFIG_MCUBOOT_MODE_SWAP_USING_OFFSET=y",
+                "CONFIG_ASSURELOOP_LIFECYCLE_ROLE",
+                "CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ONCE=y",
                 "CONFIG_ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE=y",
                 "0x08102000",
                 "STM32CubeProgrammer",
@@ -1591,6 +1614,37 @@ class ReleaseToolsTest(unittest.TestCase):
                 "Zephyr SDK was not found",
                 "MCUboot imgtool was not found",
             ] + expected_text:
+                self.assertIn(text, contents, relative_path)
+
+        logs = {
+            "samples/logs/nucleo_h563zi_mcuboot_update_confirm.log": [
+                "Swap type: test",
+                "Starting swap using offset algorithm.",
+                "version=0.1.1-dev",
+                "lifecycle_role=update-confirm",
+                "mcuboot_confirm status=confirmed",
+                "image_ok=0x1",
+                "mcuboot_confirm status=already_confirmed",
+                "loop_summary",
+            ],
+            "samples/logs/nucleo_h563zi_mcuboot_update_rollback.log": [
+                "Swap type: test",
+                "Starting swap using offset algorithm.",
+                "version=0.1.1-dev",
+                "lifecycle_role=update-rollback",
+                "Swap type: revert",
+                "version=0.1.0-dev",
+                "lifecycle_role=baseline",
+                "mcuboot_update_request_once marker=present",
+                "mcuboot_update_request status=already_requested",
+                "loop_summary",
+            ],
+        }
+        for relative_path, expected_text in logs.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in expected_text:
                 self.assertIn(text, contents, relative_path)
 
     def test_full_demo_bash_script_has_valid_syntax(self) -> None:

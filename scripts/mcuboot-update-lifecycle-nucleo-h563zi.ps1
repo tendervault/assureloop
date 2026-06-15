@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Usage: .\scripts\mcuboot-update-lifecycle-nucleo-h563zi.ps1 [-Flash] [-ConfirmUpdate]
+# Usage: .\scripts\mcuboot-update-lifecycle-nucleo-h563zi.ps1 [-FlashBaseline] [-FlashUpdate] [-ConfirmUpdate|-NoConfirmUpdate]
 # Builds a local MCUboot update-lifecycle investigation for ST NUCLEO-H563ZI.
 
 [CmdletBinding()]
@@ -20,7 +20,10 @@ param(
     [string] $BaselineImageVersion = "0.1.0+0",
     [string] $UpdateImageVersion = "0.1.1+0",
     [switch] $ConfirmUpdate,
+    [switch] $NoConfirmUpdate,
     [switch] $PermanentUpgrade,
+    [switch] $FlashBaseline,
+    [switch] $FlashUpdate,
     [switch] $Flash
 )
 
@@ -31,6 +34,8 @@ $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $OriginalSdk = $env:ZEPHYR_SDK_INSTALL_DIR
 $OriginalToolchain = $env:ZEPHYR_TOOLCHAIN_VARIANT
 $OriginalPath = $env:PATH
+$ShouldFlashBaseline = [bool]($Flash -or $FlashBaseline)
+$ShouldFlashUpdate = [bool]($Flash -or $FlashUpdate)
 
 function Invoke-Checked {
     param(
@@ -238,6 +243,10 @@ function Write-Utf8NoBom {
 
 Push-Location -LiteralPath $RepoRoot
 try {
+    if ($ConfirmUpdate -and $NoConfirmUpdate) {
+        throw "Use either -ConfirmUpdate or -NoConfirmUpdate, not both."
+    }
+
     Add-PythonUserScriptsToPath
     Add-DirectoryToPathIfExists -Path "C:\Program Files\CMake\bin"
     Add-DirectoryToPathIfExists -Path "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
@@ -261,7 +270,7 @@ try {
         $env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
     }
 
-    if ($Flash) {
+    if ($ShouldFlashBaseline -or $ShouldFlashUpdate) {
         Assert-Stm32CubeProgrammerAvailable
     }
 
@@ -302,6 +311,8 @@ try {
 
     $KeyForCMake = ConvertTo-CMakePath -Path $SigningKey
     $ImgtoolForCMake = ConvertTo-CMakePath -Path ([string] $ImgtoolCommand.FilePath)
+    $BaselineRole = "baseline"
+    $UpdateRole = if ($ConfirmUpdate) { "update-confirm" } else { "update-rollback" }
 
     $SysbuildConf = Join-Path $KeysRoot "mcuboot-nucleo-h563zi-update-lifecycle-sysbuild.conf"
     Write-Utf8NoBom -Path $SysbuildConf -Content (@(
@@ -317,6 +328,7 @@ try {
         "# SPDX-License-Identifier: Apache-2.0",
         "# Generated baseline app config for local MCUboot update lifecycle investigation.",
         "CONFIG_FLASH=y",
+        "CONFIG_FLASH_PAGE_LAYOUT=y",
         "CONFIG_FLASH_MAP=y",
         "CONFIG_STREAM_FLASH=y",
         "CONFIG_IMG_MANAGER=y",
@@ -324,7 +336,9 @@ try {
         "CONFIG_REBOOT=y",
         "CONFIG_BUILD_OUTPUT_BIN=y",
         "CONFIG_BUILD_OUTPUT_HEX=y",
+        ('CONFIG_ASSURELOOP_LIFECYCLE_ROLE="{0}"' -f $BaselineRole),
         "CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ON_BOOT=y",
+        "CONFIG_ASSURELOOP_MCUBOOT_REQUEST_UPGRADE_ONCE=y",
         ('CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION="{0}"' -f $BaselineImageVersion)
     )
     if ($PermanentUpgrade) {
@@ -338,6 +352,7 @@ try {
         "# Generated update app config for local MCUboot update lifecycle investigation.",
         "CONFIG_BOOTLOADER_MCUBOOT=y",
         "CONFIG_FLASH=y",
+        "CONFIG_FLASH_PAGE_LAYOUT=y",
         "CONFIG_FLASH_MAP=y",
         "CONFIG_STREAM_FLASH=y",
         "CONFIG_IMG_MANAGER=y",
@@ -347,6 +362,7 @@ try {
         "CONFIG_MCUBOOT_BOOTLOADER_MODE_OVERWRITE_ONLY=n",
         "CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET=y",
         "CONFIG_MCUBOOT_BOOTLOADER_NO_DOWNGRADE=y",
+        ('CONFIG_ASSURELOOP_LIFECYCLE_ROLE="{0}"' -f $UpdateRole),
         "CONFIG_ASSURELOOP_NUCLEO_H563ZI_SECONDARY_SLOT_UPDATE_IMAGE=y",
         ('CONFIG_MCUBOOT_SIGNATURE_KEY_FILE="{0}"' -f $KeyForCMake),
         ('CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION="{0}"' -f $UpdateImageVersion)
@@ -434,7 +450,10 @@ try {
     Write-Host "secondary update image start: 0x08102000"
     Write-Host "baseline release version: $BaselineVersion image version: $BaselineImageVersion"
     Write-Host "update release version: $UpdateVersion image version: $UpdateImageVersion"
+    Write-Host "baseline lifecycle role: $BaselineRole"
+    Write-Host "update lifecycle role: $UpdateRole"
     Write-Host "baseline upgrade request mode: $(if ($PermanentUpgrade) { 'permanent' } else { 'test' })"
+    Write-Host "baseline upgrade request guard: one-shot storage marker"
     Write-Host "update auto-confirm: $(if ($ConfirmUpdate) { 'enabled' } else { 'disabled' })"
 
     foreach ($Artifact in $BootloaderArtifacts) {
@@ -447,25 +466,33 @@ try {
         Write-Host "secondary-slot update artifact: $Artifact"
     }
 
-    if ($Flash) {
-        Invoke-Checked -FilePath "STM32_Programmer_CLI" -Arguments @(
-            "-c", "port=SWD", "mode=UR", "reset=HWrst",
-            "-d", $UpdateSignedHex,
-            "-v",
-            "-rst"
-        )
-        Write-Host "secondary update image flashed from $UpdateSignedHex"
+    if ($ShouldFlashBaseline -or $ShouldFlashUpdate) {
+        if ($ShouldFlashUpdate) {
+            Invoke-Checked -FilePath "STM32_Programmer_CLI" -Arguments @(
+                "-c", "port=SWD", "mode=UR", "reset=HWrst",
+                "-d", $UpdateSignedHex,
+                "-v",
+                "-rst"
+            )
+            Write-Host "secondary update image flashed from $UpdateSignedHex"
+        }
 
-        Invoke-Checked -FilePath $WestFile -Arguments ($WestPrefix + @(
-            "flash",
-            "-d", $BaselineBuildDir
-        ))
-        Write-Host "baseline bootloader and primary app flashed. The baseline app will request the staged update on boot."
+        if ($ShouldFlashBaseline) {
+            Invoke-Checked -FilePath $WestFile -Arguments ($WestPrefix + @(
+                "flash",
+                "-d", $BaselineBuildDir
+            ))
+            Write-Host "baseline bootloader and primary app flashed."
+        }
+
+        if ($ShouldFlashBaseline -and $ShouldFlashUpdate) {
+            Write-Host "the staged update was programmed before baseline flash so the baseline's first boot can request it once."
+        }
         Write-Host "Capture serial logs with: $Python -m serial.tools.miniterm $SerialPort $Baud"
-        Write-Host "Expected lifecycle logs include MCUboot swap output, release version=$UpdateVersion, and loop_summary."
+        Write-Host "Expected lifecycle logs include lifecycle_role=$BaselineRole, mcuboot_update_request_once marker=written, MCUboot swap output, release version=$UpdateVersion, lifecycle_role=$UpdateRole, and loop_summary."
     }
     else {
-        Write-Host "flash skipped. Re-run with -Flash to program a connected ST NUCLEO-H563ZI."
+        Write-Host "flash skipped. Re-run with -FlashBaseline, -FlashUpdate, or -Flash to program a connected ST NUCLEO-H563ZI."
         Write-Host "With -Flash, the script flashes the secondary update image before the baseline image."
         Write-Host "Capture serial logs with: $Python -m serial.tools.miniterm $SerialPort $Baud"
     }
