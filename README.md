@@ -161,6 +161,7 @@ Clean generated output on Windows:
 - [ST NUCLEO-H563ZI MCUboot verification](docs/nucleo-h563zi-mcuboot-verification.md)
 - [ST NUCLEO-H563ZI MCUboot update lifecycle](docs/nucleo-h563zi-mcuboot-update-lifecycle.md)
 - [v0.3 hardware-alpha release readiness](docs/v0.3-hardware-alpha-release.md)
+- [v0.3 hardware-alpha release notes](docs/releases/v0.3-hardware-alpha.md)
 - [Contributor quickstart](docs/contributor-quickstart.md)
 - [Release checklist](docs/release-checklist.md)
 - [Architecture](docs/architecture.md)

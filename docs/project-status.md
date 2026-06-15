@@ -33,6 +33,9 @@ MCUboot-compatible signed application image for development verification.
   distinguishable baseline/update serial roles, and a one-shot request marker.
 - Verifies ST NUCLEO-H563ZI hardware negative-update behavior for tampered
   secondary images and lower-version secondary images.
+- Prepares local v0.3 hardware-alpha release output under ignored `dist/`
+  paths with release notes, sample logs, sample development evidence, update
+  package output, verification summaries, and checksums.
 - Packages simulator update payloads and verifies downgrade, target, and tamper
   checks.
 - Simulates local OTA lifecycle states: staged, installed, confirmed, rollback,
@@ -107,11 +110,12 @@ must not be reused for production releases.
 | AL-016 | Partial | ST NUCLEO-H563ZI update-lifecycle artifacts build: swap-using-offset MCUboot baseline, secondary-slot signed update image at `0x08102000`, and documented confirm/rollback blockers. |
 | AL-016B | Done | Controlled NUCLEO-H563ZI MCUboot lifecycle fixture distinguishes baseline/update images, validates the staged secondary image before requesting upgrade, proves staged swap, confirm persistence, and unconfirmed rollback with real serial evidence, and prevents repeated baseline requests with a storage-partition one-shot marker. |
 | AL-017 | Done | Hardware negative-update validation proves MCUboot rejects a tampered secondary image and a lower-version secondary image on ST NUCLEO-H563ZI; v0.3 hardware-alpha release readiness is documented. |
+| AL-018 | Done | v0.3 hardware-alpha release notes and local release preparation scripts assemble safe sample/dev release materials, verification summaries, and checksums under ignored `dist/releases/v0.3-hardware-alpha/`. |
 
 ## Next Planned Milestones
 
 - Decide whether mcumgr/SMP should become the next local update transport
-  milestone after v0.3 hardware-alpha.
+  milestone after v0.3 hardware-alpha release preparation.
 - Improve evidence quality and reviewer-facing evidence bundle content.
 - Define a production signing threat model and key custody policy before any
   production signing claims.

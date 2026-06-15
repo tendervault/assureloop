@@ -1345,7 +1345,21 @@ class ReleaseToolsTest(unittest.TestCase):
                 "not production",
                 "Tampered secondary image rejection",
                 "Lower-version secondary image rejection",
+                "prepare-v0.3-release.ps1",
                 "What Not To Claim",
+            ],
+            "docs/releases/v0.3-hardware-alpha.md": [
+                "v0.3 Hardware-Alpha Release Notes",
+                "ST NUCLEO-H563ZI",
+                "Verified Hardware Proof Points",
+                "Commands To Reproduce",
+                "Sample Logs Included",
+                "Known Limitations",
+                "What Not To Claim",
+                "Next Planned Milestones",
+                "not production OTA",
+                "not production secure boot",
+                "not a safety or cybersecurity certification claim",
             ],
             "docs/release-assurance-flow.md": [
                 "Zephyr build",
@@ -1393,6 +1407,71 @@ class ReleaseToolsTest(unittest.TestCase):
         bash_contents = (REPO_ROOT / "scripts/full-demo.sh").read_text(encoding="utf-8")
         self.assertIn("test-tools", powershell_contents)
         self.assertIn("unittest discover", bash_contents)
+
+    def test_v03_release_prep_scripts_and_docs_are_present(self) -> None:
+        release_notes = (REPO_ROOT / "docs/releases/v0.3-hardware-alpha.md").read_text(
+            encoding="utf-8"
+        )
+        for text in [
+            "ST NUCLEO-H563ZI",
+            "Verified Hardware Proof Points",
+            "Tampered secondary-slot update is rejected",
+            "Lower-version secondary-slot update is rejected",
+            "not production OTA",
+            "not production secure boot",
+            "not a safety or cybersecurity certification claim",
+            "sample development",
+            "What Not To Claim",
+        ]:
+            self.assertIn(text, release_notes)
+
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("docs/releases/v0.3-hardware-alpha.md", readme)
+
+        project_status = (REPO_ROOT / "docs/project-status.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("AL-018", project_status)
+        self.assertIn("dist/releases/v0.3-hardware-alpha", project_status)
+
+        scripts = {
+            "scripts/prepare-v0.3-release.ps1": [
+                "test-tools.ps1",
+                "full-demo.ps1",
+                "hardware-build-nucleo-h563zi.ps1",
+                "signed-image-demo-nucleo-h563zi.ps1",
+                "mcuboot-verify-nucleo-h563zi.ps1",
+                "mcuboot-update-lifecycle-nucleo-h563zi.ps1",
+                "dist/releases/v0.3-hardware-alpha",
+                "sample-dev-artifacts",
+                "SHA256SUMS.txt",
+                "Assert-NoPrivateMaterial",
+                "keys/",
+                "Private keys are intentionally excluded",
+            ],
+            "scripts/prepare-v0.3-release.sh": [
+                "unittest discover",
+                "full-demo.sh",
+                "hardware-build-nucleo-h563zi.sh",
+                "signed-image-demo-nucleo-h563zi.sh",
+                "mcuboot-verify-nucleo-h563zi.sh",
+                "mcuboot-update-lifecycle-nucleo-h563zi.sh",
+                "dist/releases/v0.3-hardware-alpha",
+                "sample-dev-artifacts",
+                "SHA256SUMS.txt",
+                "assert_no_private_material",
+                "keys/",
+                "Private keys are intentionally excluded",
+            ],
+        }
+        for relative_path, expected_text in scripts.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            self.assertNotIn("Copy-Item -LiteralPath keys", contents)
+            self.assertNotIn("cp -R keys", contents)
+            for text in expected_text:
+                self.assertIn(text, contents, relative_path)
 
     def test_nucleo_h563zi_hardware_scripts_and_docs_are_present(self) -> None:
         docs = (REPO_ROOT / "docs/nucleo-h563zi-bringup.md").read_text(encoding="utf-8")
@@ -1702,6 +1781,7 @@ class ReleaseToolsTest(unittest.TestCase):
             "scripts/signed-image-demo-nucleo-h563zi.sh",
             "scripts/mcuboot-verify-nucleo-h563zi.sh",
             "scripts/mcuboot-update-lifecycle-nucleo-h563zi.sh",
+            "scripts/prepare-v0.3-release.sh",
         ):
             result = subprocess.run(
                 [bash, "-n", str(REPO_ROOT / relative_path)],
@@ -1724,6 +1804,7 @@ class ReleaseToolsTest(unittest.TestCase):
             "scripts/signed-image-demo-nucleo-h563zi.ps1",
             "scripts/mcuboot-verify-nucleo-h563zi.ps1",
             "scripts/mcuboot-update-lifecycle-nucleo-h563zi.ps1",
+            "scripts/prepare-v0.3-release.ps1",
         ):
             script = REPO_ROOT / relative_path
             command = (
