@@ -1292,6 +1292,7 @@ class ReleaseToolsTest(unittest.TestCase):
         required_docs = {
             "docs/project-status.md": [
                 "AL-013",
+                "AL-020",
                 "simulator-first",
                 "not production-ready",
             ],
@@ -1391,6 +1392,60 @@ class ReleaseToolsTest(unittest.TestCase):
             contents = path.read_text(encoding="utf-8")
             for text in expected_text:
                 self.assertIn(text, contents, relative_path)
+
+    def test_launch_readiness_docs_are_present(self) -> None:
+        required_docs = {
+            "docs/launch-brief.md": [
+                "What AssureLoop Is",
+                "What v0.3 Proves",
+                "Who Should Care",
+                "Feedback We Want",
+                "What Not To Claim",
+                "not a production OTA",
+                "not production secure boot",
+                "not certified safety or cybersecurity",
+                "ST NUCLEO-H563ZI",
+            ],
+            "docs/technical-faq.md": [
+                "Is AssureLoop An OS?",
+                "Is It Production OTA?",
+                "Is It Certified?",
+                "Why Zephyr?",
+                "Why MCUboot?",
+                "What Is SBOM?",
+                "What Is An Evidence Bundle?",
+                "What Hardware Is Supported?",
+                "What Is Simulator-Only Vs Hardware-Proven?",
+                "not production OTA",
+                "not production secure boot",
+                "certified safety/cybersecurity",
+            ],
+            "docs/design-partner-feedback.md": [
+                "Would AssureLoop fit your current firmware release process?",
+                "What evidence do you currently collect",
+                "Do you need SBOMs",
+                "How do you handle update package verification",
+                "What would block adoption",
+                "not production OTA",
+                "not production secure boot",
+                "not certified safety",
+            ],
+        }
+
+        for relative_path, expected_text in required_docs.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in expected_text:
+                self.assertIn(text, contents, relative_path)
+
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        for text in [
+            "docs/launch-brief.md",
+            "docs/technical-faq.md",
+            "docs/design-partner-feedback.md",
+        ]:
+            self.assertIn(text, readme)
 
     def test_public_landing_page_is_present(self) -> None:
         index = REPO_ROOT / "site/index.html"

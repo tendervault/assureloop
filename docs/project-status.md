@@ -40,6 +40,8 @@ MCUboot-compatible signed application image for development verification.
   package output, verification summaries, and checksums.
 - Publishes a static public landing page from `site/` for `assureloop.dev`
   through GitHub Pages, with explicit non-production limitations.
+- Provides public launch-readiness docs: a launch brief, technical FAQ, and
+  design-partner feedback guide for early embedded-team review.
 - Packages simulator update payloads and verifies downgrade, target, and tamper
   checks.
 - Simulates local OTA lifecycle states: staged, installed, confirmed, rollback,
@@ -116,6 +118,7 @@ must not be reused for production releases.
 | AL-017 | Done | Hardware negative-update validation proves MCUboot rejects a tampered secondary image and a lower-version secondary image on ST NUCLEO-H563ZI; v0.3 hardware-alpha release readiness is documented. |
 | AL-018 | Done | v0.3 hardware-alpha release notes and local release preparation scripts assemble safe sample/dev release materials, verification summaries, and checksums under ignored `dist/releases/v0.3-hardware-alpha/`. |
 | AL-019 | Done | Public static landing page for `assureloop.dev` documents AssureLoop's release-assurance scope, v0.3 hardware-alpha proof points, supported ST NUCLEO-H563ZI board, resource links, domain setup, and non-production limitations. |
+| AL-020 | Done | Public launch-readiness docs explain what to share, common technical answers, desired design-partner feedback, and what not to claim. |
 
 ## Next Planned Milestones
 
@@ -123,6 +126,8 @@ must not be reused for production releases.
   milestone after v0.3 hardware-alpha release preparation.
 - Keep the public site aligned with future alpha release notes and hardware
   evidence without adding backend services or analytics.
+- Convert design-partner feedback into scoped issues before adding new hardware
+  targets or update transports.
 - Improve evidence quality and reviewer-facing evidence bundle content.
 - Define a production signing threat model and key custody policy before any
   production signing claims.

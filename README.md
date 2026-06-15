@@ -159,6 +159,9 @@ Clean generated output on Windows:
 ## Documentation
 
 - [Project status](docs/project-status.md)
+- [Launch brief](docs/launch-brief.md)
+- [Technical FAQ](docs/technical-faq.md)
+- [Design partner feedback questions](docs/design-partner-feedback.md)
 - [Release assurance flow](docs/release-assurance-flow.md)
 - [Hardware target selection](docs/hardware-target-selection.md)
 - [ST NUCLEO-H563ZI bring-up](docs/nucleo-h563zi-bringup.md)
