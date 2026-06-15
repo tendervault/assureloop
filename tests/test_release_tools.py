@@ -1318,6 +1318,15 @@ class ReleaseToolsTest(unittest.TestCase):
                 "development key",
                 "not a certification claim",
             ],
+            "docs/nucleo-h563zi-mcuboot-verification.md": [
+                "MCUboot",
+                "nucleo_h563zi",
+                "sysbuild",
+                "signed application",
+                "COM4",
+                "loop_summary",
+                "not production secure boot certification",
+            ],
             "docs/release-assurance-flow.md": [
                 "Zephyr build",
                 "release-manifest.json",
@@ -1441,6 +1450,67 @@ class ReleaseToolsTest(unittest.TestCase):
             for text in expected_text:
                 self.assertIn(text, contents, relative_path)
 
+    def test_nucleo_h563zi_mcuboot_scripts_and_docs_are_present(self) -> None:
+        docs = (REPO_ROOT / "docs/nucleo-h563zi-mcuboot-verification.md").read_text(
+            encoding="utf-8"
+        )
+        for text in [
+            "MCUboot",
+            "nucleo_h563zi",
+            "build-mcuboot-nucleo-h563zi",
+            "zephyr.signed.bin",
+            "zephyr.signed.hex",
+            "0x08000000",
+            "0x08010000",
+            "serial",
+            "COM4",
+            "I: Starting bootloader",
+            "I: Bootloader chainload address offset: 0x10000",
+            "AssureLoop controller demo booting",
+            "loop_summary iterations=20",
+            "Limitations",
+        ]:
+            self.assertIn(text, docs)
+
+        config = (REPO_ROOT / "firmware/app/sysbuild/mcuboot_nucleo_h563zi.conf").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("CONFIG_BOOT_VALIDATE_SLOT0=y", config)
+        self.assertIn("CONFIG_MCUBOOT_LOG_LEVEL_INF=y", config)
+
+        overlay = (
+            REPO_ROOT / "firmware/app/sysbuild/mcuboot_nucleo_h563zi.overlay"
+        ).read_text(encoding="utf-8")
+        self.assertIn("zephyr,code-partition = &boot_partition", overlay)
+
+        scripts = {
+            "scripts/mcuboot-verify-nucleo-h563zi.ps1": [
+                "-Flash",
+                "--sysbuild",
+                "STM32CubeProgrammer",
+                "mcuboot-nucleo-h563zi-sysbuild.conf",
+            ],
+            "scripts/mcuboot-verify-nucleo-h563zi.sh": [
+                "--flash",
+                "--sysbuild",
+                "STM32CubeProgrammer",
+                "mcuboot-nucleo-h563zi-sysbuild.conf",
+            ],
+        }
+        for relative_path, expected_text in scripts.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in [
+                "nucleo_h563zi",
+                "build-mcuboot-nucleo-h563zi",
+                "zephyr.signed.hex",
+                "west was not found",
+                "Zephyr SDK was not found",
+                "MCUboot imgtool was not found",
+            ] + expected_text:
+                self.assertIn(text, contents, relative_path)
+
     def test_full_demo_bash_script_has_valid_syntax(self) -> None:
         bash = self._bash()
         if bash is None:
@@ -1451,6 +1521,7 @@ class ReleaseToolsTest(unittest.TestCase):
             "scripts/hardware-build-nucleo-h563zi.sh",
             "scripts/signed-image-demo.sh",
             "scripts/signed-image-demo-nucleo-h563zi.sh",
+            "scripts/mcuboot-verify-nucleo-h563zi.sh",
         ):
             result = subprocess.run(
                 [bash, "-n", str(REPO_ROOT / relative_path)],
@@ -1471,6 +1542,7 @@ class ReleaseToolsTest(unittest.TestCase):
             "scripts/hardware-build-nucleo-h563zi.ps1",
             "scripts/signed-image-demo.ps1",
             "scripts/signed-image-demo-nucleo-h563zi.ps1",
+            "scripts/mcuboot-verify-nucleo-h563zi.ps1",
         ):
             script = REPO_ROOT / relative_path
             command = (
@@ -1514,6 +1586,7 @@ class ReleaseToolsTest(unittest.TestCase):
                 "check-ignore",
                 "keys/dev-rsa-private.pem",
                 "keys/mcuboot-dev-rsa-2048.pem",
+                "keys/mcuboot-nucleo-h563zi-sysbuild.conf",
                 "dist/firmware-release/release-manifest.sig",
                 "dist/ota-sim/state.json",
             ],
@@ -1525,6 +1598,7 @@ class ReleaseToolsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("keys/dev-rsa-private.pem", result.stdout)
         self.assertIn("keys/mcuboot-dev-rsa-2048.pem", result.stdout)
+        self.assertIn("keys/mcuboot-nucleo-h563zi-sysbuild.conf", result.stdout)
         self.assertIn("dist/firmware-release/release-manifest.sig", result.stdout)
         self.assertIn("dist/ota-sim/state.json", result.stdout)
 

@@ -26,6 +26,8 @@ MCUboot-compatible signed application image for development verification.
 - Produces MCUboot-compatible signed image artifacts where Zephyr supports them.
 - Produces ST NUCLEO-H563ZI board-specific signed image evidence and update
   packages for development verification.
+- Verifies ST NUCLEO-H563ZI MCUboot bootloader execution and signed application
+  chainload using local development keys.
 - Packages simulator update payloads and verifies downgrade, target, and tamper
   checks.
 - Simulates local OTA lifecycle states: staged, installed, confirmed, rollback,
@@ -52,7 +54,9 @@ The first physical validation target is ST NUCLEO-H563ZI. AL-013 manually
 validated build, flash, and COM4 serial logging for that board, but broad
 hardware support and hardware-backed update/rollback remain future work.
 AL-014 adds board-specific signed image evidence and package verification for
-that target using local development keys.
+that target using local development keys. AL-015 verifies MCUboot bootloader
+execution on the physical board and confirms the AssureLoop signed application
+boots after MCUboot.
 
 ## Not Production-Ready Yet
 
@@ -89,10 +93,10 @@ must not be reused for production releases.
 | AL-012 | Done | First hardware target selection recommends ST NUCLEO-H563ZI, names nRF52840 DK as backup, and defines board-readiness milestones. |
 | AL-013 | Done | ST NUCLEO-H563ZI manually builds, flashes, starts successfully, and emits the expected COM4 controller logs. |
 | AL-014 | Done | ST NUCLEO-H563ZI signed-image evidence produces SBOM-backed manifests, evidence bundles, and update packages with development keys. |
+| AL-015 | Done | ST NUCLEO-H563ZI boots through MCUboot with a locally signed development image; serial logs show MCUboot chainload and AssureLoop `loop_summary`. |
 
 ## Next Planned Milestones
 
-- AL-015: verify MCUboot boot behavior on ST NUCLEO-H563ZI.
 - AL-016: demonstrate local update and rollback behavior on ST NUCLEO-H563ZI
   if practical.
 - Improve evidence quality and reviewer-facing evidence bundle content.

@@ -23,7 +23,7 @@ AssureLoop is not:
 - a production bootloader,
 - a production OTA transport,
 - a cloud update service,
-- physical hardware board support,
+- broad physical hardware board support,
 - a production signing-key custody model,
 - a safety or cybersecurity certification claim.
 
@@ -158,6 +158,7 @@ Clean generated output on Windows:
 - [Hardware target selection](docs/hardware-target-selection.md)
 - [ST NUCLEO-H563ZI bring-up](docs/nucleo-h563zi-bringup.md)
 - [ST NUCLEO-H563ZI signed evidence](docs/nucleo-h563zi-signed-evidence.md)
+- [ST NUCLEO-H563ZI MCUboot verification](docs/nucleo-h563zi-mcuboot-verification.md)
 - [Contributor quickstart](docs/contributor-quickstart.md)
 - [Release checklist](docs/release-checklist.md)
 - [Architecture](docs/architecture.md)
