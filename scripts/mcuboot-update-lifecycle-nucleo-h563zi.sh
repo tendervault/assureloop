@@ -19,9 +19,16 @@ UPDATE_IMAGE_VERSION="0.1.1+0"
 CONFIRM_UPDATE=0
 NO_CONFIRM_UPDATE=0
 PERMANENT_UPGRADE=0
+TAMPER_UPDATE=0
+DOWNGRADE_UPDATE=0
+ERASE_BEFORE_FLASH=0
 FLASH_BASELINE=0
 FLASH_UPDATE=0
 FLASH=0
+BASELINE_VERSION_SET=0
+UPDATE_VERSION_SET=0
+BASELINE_IMAGE_VERSION_SET=0
+UPDATE_IMAGE_VERSION_SET=0
 
 usage() {
   cat <<'EOF'
@@ -38,6 +45,9 @@ Options:
   --confirm-update                Build the update image to confirm itself on first boot
   --no-confirm-update             Build the update image for rollback validation
   --permanent-upgrade             Baseline requests a permanent upgrade instead of test upgrade
+  --tamper-update                 Create and optionally flash a tampered signed update hex
+  --downgrade-update              Build a higher-version baseline and lower-version update
+  --erase-before-flash            Mass erase the device before flashing lifecycle images
   --baseline-version <version>    Release version printed by the baseline app
   --update-version <version>      Release version printed by the update app
   --baseline-image-version <ver>  MCUboot image version for the baseline, e.g. 0.1.0+0
@@ -77,20 +87,36 @@ while (($#)); do
       PERMANENT_UPGRADE=1
       shift
       ;;
+    --tamper-update)
+      TAMPER_UPDATE=1
+      shift
+      ;;
+    --downgrade-update)
+      DOWNGRADE_UPDATE=1
+      shift
+      ;;
+    --erase-before-flash)
+      ERASE_BEFORE_FLASH=1
+      shift
+      ;;
     --baseline-version)
       BASELINE_VERSION="$2"
+      BASELINE_VERSION_SET=1
       shift 2
       ;;
     --update-version)
       UPDATE_VERSION="$2"
+      UPDATE_VERSION_SET=1
       shift 2
       ;;
     --baseline-image-version)
       BASELINE_IMAGE_VERSION="$2"
+      BASELINE_IMAGE_VERSION_SET=1
       shift 2
       ;;
     --update-image-version)
       UPDATE_IMAGE_VERSION="$2"
+      UPDATE_IMAGE_VERSION_SET=1
       shift 2
       ;;
     -h|--help)
@@ -108,6 +134,23 @@ done
 if ((CONFIRM_UPDATE && NO_CONFIRM_UPDATE)); then
   echo "use either --confirm-update or --no-confirm-update, not both" >&2
   exit 2
+fi
+
+if ((TAMPER_UPDATE && DOWNGRADE_UPDATE)); then
+  echo "use either --tamper-update or --downgrade-update, not both" >&2
+  exit 2
+fi
+
+if (((TAMPER_UPDATE || DOWNGRADE_UPDATE) && CONFIRM_UPDATE)); then
+  echo "negative update validation uses a non-confirming update image; omit --confirm-update" >&2
+  exit 2
+fi
+
+if ((DOWNGRADE_UPDATE)); then
+  ((BASELINE_VERSION_SET)) || BASELINE_VERSION="0.1.1-dev"
+  ((BASELINE_IMAGE_VERSION_SET)) || BASELINE_IMAGE_VERSION="0.1.1+0"
+  ((UPDATE_VERSION_SET)) || UPDATE_VERSION="0.1.0-dev"
+  ((UPDATE_IMAGE_VERSION_SET)) || UPDATE_IMAGE_VERSION="0.1.0+0"
 fi
 
 if ((FLASH)); then
@@ -239,10 +282,75 @@ to_cmake_path() {
   fi
 }
 
+tamper_intel_hex() {
+  local input_hex="$1"
+  local output_hex="$2"
+  "${PYTHON}" - "${input_hex}" "${output_hex}" <<'PY'
+from pathlib import Path
+import sys
+
+input_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+minimum_address = 0x08102400
+extended_address = 0
+tampered = False
+output_lines = []
+
+for line in input_path.read_text(encoding="utf-8").splitlines():
+    if len(line) < 11 or not line.startswith(":"):
+        output_lines.append(line)
+        continue
+
+    byte_count = int(line[1:3], 16)
+    address = int(line[3:7], 16)
+    record_type = int(line[7:9], 16)
+    data = line[9 : 9 + byte_count * 2]
+
+    if record_type == 4 and byte_count == 2:
+        extended_address = int(data, 16) << 16
+        output_lines.append(line)
+        continue
+
+    if not tampered and record_type == 0 and byte_count:
+        absolute_address = extended_address + address
+        if absolute_address >= minimum_address:
+            data_bytes = bytearray(bytes.fromhex(data))
+            data_bytes[0] ^= 0x01
+            checksum_sum = (
+                byte_count
+                + ((address >> 8) & 0xFF)
+                + (address & 0xFF)
+                + record_type
+                + sum(data_bytes)
+            )
+            checksum = (-checksum_sum) & 0xFF
+            output_lines.append(
+                f":{byte_count:02X}{address:04X}{record_type:02X}"
+                f"{data_bytes.hex().upper()}{checksum:02X}"
+            )
+            tampered = True
+            continue
+
+    output_lines.append(line)
+
+if not tampered:
+    raise SystemExit(
+        f"could not find an Intel HEX data record at or after "
+        f"0x{minimum_address:08X} to tamper in {input_path}"
+    )
+
+output_path.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+PY
+}
+
 key_for_cmake="$(to_cmake_path "${signing_key}")"
 imgtool_for_cmake="$(to_cmake_path "${imgtool_script}")"
 BASELINE_ROLE="baseline"
-if ((CONFIRM_UPDATE)); then
+if ((DOWNGRADE_UPDATE)); then
+  UPDATE_ROLE="update-downgrade"
+elif ((TAMPER_UPDATE)); then
+  UPDATE_ROLE="update-tampered"
+elif ((CONFIRM_UPDATE)); then
   UPDATE_ROLE="update-confirm"
 else
   UPDATE_ROLE="update-rollback"
@@ -321,6 +429,8 @@ update_app_conf_for_cmake="$(to_cmake_path "${update_app_conf}")"
   "-DASSURELOOP_VERSION=${UPDATE_VERSION}"
 
 update_signed_hex="${UPDATE_BUILD_DIR}/zephyr/zephyr.signed.hex"
+flash_update_hex="${update_signed_hex}"
+tampered_update_hex=""
 if [[ ! -f "${BASELINE_BUILD_DIR}/mcuboot/zephyr/zephyr.hex" ]]; then
   echo "No MCUboot bootloader artifact was produced under ${BASELINE_BUILD_DIR}." >&2
   exit 1
@@ -328,6 +438,11 @@ fi
 if [[ ! -f "${update_signed_hex}" ]]; then
   echo "No secondary-slot signed update hex was produced at ${update_signed_hex}." >&2
   exit 1
+fi
+if ((TAMPER_UPDATE)); then
+  tampered_update_hex="${UPDATE_BUILD_DIR}/zephyr/zephyr.signed.tampered.hex"
+  tamper_intel_hex "${update_signed_hex}" "${tampered_update_hex}"
+  flash_update_hex="${tampered_update_hex}"
 fi
 
 echo "MCUboot mode: swap using offset"
@@ -350,6 +465,13 @@ if ((CONFIRM_UPDATE)); then
 else
   echo "update auto-confirm: disabled"
 fi
+if ((TAMPER_UPDATE)); then
+  echo "negative update mode: tamper"
+elif ((DOWNGRADE_UPDATE)); then
+  echo "negative update mode: downgrade"
+else
+  echo "negative update mode: none"
+fi
 
 for artifact in \
   "${BASELINE_BUILD_DIR}/mcuboot/zephyr/zephyr.elf" \
@@ -369,11 +491,19 @@ find "${UPDATE_BUILD_DIR}/zephyr" -maxdepth 1 -type f \( \
   -name 'zephyr.bin' -o -name 'zephyr.hex' -o \
   -name 'zephyr.signed.bin' -o -name 'zephyr.signed.hex' \
 \) -print | sort | sed 's/^/secondary-slot update artifact: /'
+if [[ -n "${tampered_update_hex}" && -f "${tampered_update_hex}" ]]; then
+  echo "secondary-slot update artifact: ${tampered_update_hex}"
+fi
 
 if ((FLASH_BASELINE || FLASH_UPDATE)); then
+  if ((ERASE_BEFORE_FLASH)); then
+    STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst -e all
+    echo "device mass erase completed before lifecycle flash."
+  fi
+
   if ((FLASH_UPDATE)); then
-    STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst -d "${update_signed_hex}" -v -rst
-    echo "secondary update image flashed from ${update_signed_hex}"
+    STM32_Programmer_CLI -c port=SWD mode=UR reset=HWrst -d "${flash_update_hex}" -v -rst
+    echo "secondary update image flashed from ${flash_update_hex}"
   fi
 
   if ((FLASH_BASELINE)); then
@@ -385,9 +515,18 @@ if ((FLASH_BASELINE || FLASH_UPDATE)); then
     echo "the staged update was programmed before baseline flash so the baseline's first boot can request it once."
   fi
   echo "Capture serial logs with: ${PYTHON} -m serial.tools.miniterm ${SERIAL_PORT} ${BAUD}"
-  echo "Expected lifecycle logs include lifecycle_role=${BASELINE_ROLE}, mcuboot_update_request_once marker=written, MCUboot swap output, release version=${UPDATE_VERSION}, lifecycle_role=${UPDATE_ROLE}, and loop_summary."
+  if ((TAMPER_UPDATE)); then
+    echo "Expected tamper logs include MCUboot validation rejection for the secondary image and baseline version=${BASELINE_VERSION} continuing to boot."
+  elif ((DOWNGRADE_UPDATE)); then
+    echo "Expected downgrade logs include MCUboot downgrade prevention for secondary version=${UPDATE_IMAGE_VERSION} and baseline version=${BASELINE_VERSION} continuing to boot."
+  else
+    echo "Expected lifecycle logs include lifecycle_role=${BASELINE_ROLE}, mcuboot_update_request_once marker=written, MCUboot swap output, release version=${UPDATE_VERSION}, lifecycle_role=${UPDATE_ROLE}, and loop_summary."
+  fi
 else
   echo "flash skipped. Re-run with --flash-baseline, --flash-update, or --flash to program a connected ST NUCLEO-H563ZI."
   echo "With --flash, the script flashes the secondary update image before the baseline image."
+  if [[ -n "${tampered_update_hex}" ]]; then
+    echo "tampered secondary update image: ${tampered_update_hex}"
+  fi
   echo "Capture serial logs with: ${PYTHON} -m serial.tools.miniterm ${SERIAL_PORT} ${BAUD}"
 fi

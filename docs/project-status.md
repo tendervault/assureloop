@@ -31,6 +31,8 @@ MCUboot-compatible signed application image for development verification.
 - Builds ST NUCLEO-H563ZI MCUboot update-lifecycle investigation artifacts,
   including a swap-using-offset baseline, a secondary-slot signed update image,
   distinguishable baseline/update serial roles, and a one-shot request marker.
+- Verifies ST NUCLEO-H563ZI hardware negative-update behavior for tampered
+  secondary images and lower-version secondary images.
 - Packages simulator update payloads and verifies downgrade, target, and tamper
   checks.
 - Simulates local OTA lifecycle states: staged, installed, confirmed, rollback,
@@ -62,8 +64,9 @@ execution on the physical board and confirms the AssureLoop signed application
 boots after MCUboot. AL-016 adds the board-specific update-lifecycle build and
 staging path. AL-016B adds a controlled dual-image fixture with a secondary-slot
 validity check and one-shot baseline request marker. Physical NUCLEO-H563ZI
-serial evidence now proves staged swap, confirmed update persistence, and
-unconfirmed rollback for the local direct-flash lifecycle path.
+serial evidence proves staged swap, confirmed update persistence, unconfirmed
+rollback, tampered-update rejection, and downgrade-update rejection for the
+local direct-flash lifecycle path.
 
 ## Not Production-Ready Yet
 
@@ -103,12 +106,12 @@ must not be reused for production releases.
 | AL-015 | Done | ST NUCLEO-H563ZI boots through MCUboot with a locally signed development image; serial logs show MCUboot chainload and AssureLoop `loop_summary`. |
 | AL-016 | Partial | ST NUCLEO-H563ZI update-lifecycle artifacts build: swap-using-offset MCUboot baseline, secondary-slot signed update image at `0x08102000`, and documented confirm/rollback blockers. |
 | AL-016B | Done | Controlled NUCLEO-H563ZI MCUboot lifecycle fixture distinguishes baseline/update images, validates the staged secondary image before requesting upgrade, proves staged swap, confirm persistence, and unconfirmed rollback with real serial evidence, and prevents repeated baseline requests with a storage-partition one-shot marker. |
+| AL-017 | Done | Hardware negative-update validation proves MCUboot rejects a tampered secondary image and a lower-version secondary image on ST NUCLEO-H563ZI; v0.3 hardware-alpha release readiness is documented. |
 
 ## Next Planned Milestones
 
-- Extend hardware lifecycle evidence with controlled downgrade and tamper
-  rejection logs on ST NUCLEO-H563ZI, then decide whether mcumgr/SMP should
-  become the next local update transport milestone.
+- Decide whether mcumgr/SMP should become the next local update transport
+  milestone after v0.3 hardware-alpha.
 - Improve evidence quality and reviewer-facing evidence bundle content.
 - Define a production signing threat model and key custody policy before any
   production signing claims.

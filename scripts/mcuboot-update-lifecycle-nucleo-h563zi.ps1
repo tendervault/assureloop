@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Usage: .\scripts\mcuboot-update-lifecycle-nucleo-h563zi.ps1 [-FlashBaseline] [-FlashUpdate] [-ConfirmUpdate|-NoConfirmUpdate]
+# Usage: .\scripts\mcuboot-update-lifecycle-nucleo-h563zi.ps1 [-FlashBaseline] [-FlashUpdate] [-ConfirmUpdate|-NoConfirmUpdate] [-TamperUpdate|-DowngradeUpdate] [-EraseBeforeFlash]
 # Builds a local MCUboot update-lifecycle investigation for ST NUCLEO-H563ZI.
 
 [CmdletBinding()]
@@ -22,6 +22,9 @@ param(
     [switch] $ConfirmUpdate,
     [switch] $NoConfirmUpdate,
     [switch] $PermanentUpgrade,
+    [switch] $TamperUpdate,
+    [switch] $DowngradeUpdate,
+    [switch] $EraseBeforeFlash,
     [switch] $FlashBaseline,
     [switch] $FlashUpdate,
     [switch] $Flash
@@ -241,10 +244,93 @@ function Write-Utf8NoBom {
     [System.IO.File]::WriteAllText($Path, $Content + [Environment]::NewLine, $Utf8NoBom)
 }
 
+function New-TamperedIntelHex {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $InputPath,
+
+        [Parameter(Mandatory = $true)]
+        [string] $OutputPath,
+
+        [uint32] $MinimumAddress = 0x08102400
+    )
+
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $Lines = [System.IO.File]::ReadAllLines($InputPath)
+    $ExtendedAddress = [uint32] 0
+    $Tampered = $false
+    $OutputLines = foreach ($Line in $Lines) {
+        if ($Line.Length -lt 11 -or -not $Line.StartsWith(":")) {
+            $Line
+            continue
+        }
+
+        $ByteCount = [Convert]::ToInt32($Line.Substring(1, 2), 16)
+        $Address = [Convert]::ToInt32($Line.Substring(3, 4), 16)
+        $RecordType = [Convert]::ToInt32($Line.Substring(7, 2), 16)
+        $Data = $Line.Substring(9, $ByteCount * 2)
+
+        if ($RecordType -eq 4 -and $ByteCount -eq 2) {
+            $ExtendedAddress = [uint32] ([Convert]::ToInt32($Data, 16) -shl 16)
+            $Line
+            continue
+        }
+
+        if (-not $Tampered -and $RecordType -eq 0 -and $ByteCount -gt 0) {
+            $AbsoluteAddress = $ExtendedAddress + [uint32] $Address
+            if ($AbsoluteAddress -ge $MinimumAddress) {
+                $Bytes = [byte[]]::new($ByteCount)
+                for ($Index = 0; $Index -lt $ByteCount; $Index++) {
+                    $Bytes[$Index] = [Convert]::ToByte($Data.Substring($Index * 2, 2), 16)
+                }
+
+                $Bytes[0] = [byte] ($Bytes[0] -bxor 0x01)
+                $ChecksumSum = $ByteCount + (($Address -shr 8) -band 0xff) + ($Address -band 0xff) + $RecordType
+                foreach ($Byte in $Bytes) {
+                    $ChecksumSum += $Byte
+                }
+                $Checksum = (-$ChecksumSum) -band 0xff
+                $DataHex = ($Bytes | ForEach-Object { $_.ToString("X2") }) -join ""
+                $Tampered = $true
+                ":{0:X2}{1:X4}{2:X2}{3}{4:X2}" -f $ByteCount, $Address, $RecordType, $DataHex, $Checksum
+                continue
+            }
+        }
+
+        $Line
+    }
+
+    if (-not $Tampered) {
+        throw "Could not find an Intel HEX data record at or after 0x{0:X8} to tamper in $InputPath." -f $MinimumAddress
+    }
+
+    [System.IO.File]::WriteAllLines($OutputPath, $OutputLines, $Utf8NoBom)
+}
+
 Push-Location -LiteralPath $RepoRoot
 try {
     if ($ConfirmUpdate -and $NoConfirmUpdate) {
         throw "Use either -ConfirmUpdate or -NoConfirmUpdate, not both."
+    }
+    if ($TamperUpdate -and $DowngradeUpdate) {
+        throw "Use either -TamperUpdate or -DowngradeUpdate, not both."
+    }
+    if (($TamperUpdate -or $DowngradeUpdate) -and $ConfirmUpdate) {
+        throw "Negative update validation uses a non-confirming update image. Omit -ConfirmUpdate."
+    }
+    if ($DowngradeUpdate) {
+        if (-not $PSBoundParameters.ContainsKey("BaselineVersion")) {
+            $BaselineVersion = "0.1.1-dev"
+        }
+        if (-not $PSBoundParameters.ContainsKey("BaselineImageVersion")) {
+            $BaselineImageVersion = "0.1.1+0"
+        }
+        if (-not $PSBoundParameters.ContainsKey("UpdateVersion")) {
+            $UpdateVersion = "0.1.0-dev"
+        }
+        if (-not $PSBoundParameters.ContainsKey("UpdateImageVersion")) {
+            $UpdateImageVersion = "0.1.0+0"
+        }
     }
 
     Add-PythonUserScriptsToPath
@@ -312,7 +398,18 @@ try {
     $KeyForCMake = ConvertTo-CMakePath -Path $SigningKey
     $ImgtoolForCMake = ConvertTo-CMakePath -Path ([string] $ImgtoolCommand.FilePath)
     $BaselineRole = "baseline"
-    $UpdateRole = if ($ConfirmUpdate) { "update-confirm" } else { "update-rollback" }
+    $UpdateRole = if ($DowngradeUpdate) {
+        "update-downgrade"
+    }
+    elseif ($TamperUpdate) {
+        "update-tampered"
+    }
+    elseif ($ConfirmUpdate) {
+        "update-confirm"
+    }
+    else {
+        "update-rollback"
+    }
 
     $SysbuildConf = Join-Path $KeysRoot "mcuboot-nucleo-h563zi-update-lifecycle-sysbuild.conf"
     Write-Utf8NoBom -Path $SysbuildConf -Content (@(
@@ -435,12 +532,20 @@ try {
     )
 
     $UpdateSignedHex = Join-Path $UpdateRoot "zephyr/zephyr.signed.hex"
+    $FlashUpdateHex = $UpdateSignedHex
+    $TamperedUpdateHex = $null
 
     if ($BootloaderArtifacts.Count -eq 0) {
         throw "No MCUboot bootloader artifacts were produced under $BaselineRoot."
     }
     if (-not (Test-Path -LiteralPath $UpdateSignedHex -PathType Leaf)) {
         throw "No secondary-slot signed update hex was produced at $UpdateSignedHex."
+    }
+    if ($TamperUpdate) {
+        $TamperedUpdateHex = Join-Path $UpdateRoot "zephyr/zephyr.signed.tampered.hex"
+        New-TamperedIntelHex -InputPath $UpdateSignedHex -OutputPath $TamperedUpdateHex
+        $FlashUpdateHex = $TamperedUpdateHex
+        $UpdateArtifacts += $TamperedUpdateHex
     }
 
     Write-Host "MCUboot mode: swap using offset"
@@ -455,6 +560,7 @@ try {
     Write-Host "baseline upgrade request mode: $(if ($PermanentUpgrade) { 'permanent' } else { 'test' })"
     Write-Host "baseline upgrade request guard: one-shot storage marker"
     Write-Host "update auto-confirm: $(if ($ConfirmUpdate) { 'enabled' } else { 'disabled' })"
+    Write-Host "negative update mode: $(if ($TamperUpdate) { 'tamper' } elseif ($DowngradeUpdate) { 'downgrade' } else { 'none' })"
 
     foreach ($Artifact in $BootloaderArtifacts) {
         Write-Host "MCUboot bootloader artifact: $Artifact"
@@ -467,14 +573,22 @@ try {
     }
 
     if ($ShouldFlashBaseline -or $ShouldFlashUpdate) {
+        if ($EraseBeforeFlash) {
+            Invoke-Checked -FilePath "STM32_Programmer_CLI" -Arguments @(
+                "-c", "port=SWD", "mode=UR", "reset=HWrst",
+                "-e", "all"
+            )
+            Write-Host "device mass erase completed before lifecycle flash."
+        }
+
         if ($ShouldFlashUpdate) {
             Invoke-Checked -FilePath "STM32_Programmer_CLI" -Arguments @(
                 "-c", "port=SWD", "mode=UR", "reset=HWrst",
-                "-d", $UpdateSignedHex,
+                "-d", $FlashUpdateHex,
                 "-v",
                 "-rst"
             )
-            Write-Host "secondary update image flashed from $UpdateSignedHex"
+            Write-Host "secondary update image flashed from $FlashUpdateHex"
         }
 
         if ($ShouldFlashBaseline) {
@@ -489,11 +603,22 @@ try {
             Write-Host "the staged update was programmed before baseline flash so the baseline's first boot can request it once."
         }
         Write-Host "Capture serial logs with: $Python -m serial.tools.miniterm $SerialPort $Baud"
-        Write-Host "Expected lifecycle logs include lifecycle_role=$BaselineRole, mcuboot_update_request_once marker=written, MCUboot swap output, release version=$UpdateVersion, lifecycle_role=$UpdateRole, and loop_summary."
+        if ($TamperUpdate) {
+            Write-Host "Expected tamper logs include MCUboot validation rejection for the secondary image and baseline version=$BaselineVersion continuing to boot."
+        }
+        elseif ($DowngradeUpdate) {
+            Write-Host "Expected downgrade logs include MCUboot downgrade prevention for secondary version=$UpdateImageVersion and baseline version=$BaselineVersion continuing to boot."
+        }
+        else {
+            Write-Host "Expected lifecycle logs include lifecycle_role=$BaselineRole, mcuboot_update_request_once marker=written, MCUboot swap output, release version=$UpdateVersion, lifecycle_role=$UpdateRole, and loop_summary."
+        }
     }
     else {
         Write-Host "flash skipped. Re-run with -FlashBaseline, -FlashUpdate, or -Flash to program a connected ST NUCLEO-H563ZI."
         Write-Host "With -Flash, the script flashes the secondary update image before the baseline image."
+        if ($TamperUpdate) {
+            Write-Host "tampered secondary update image: $TamperedUpdateHex"
+        }
         Write-Host "Capture serial logs with: $Python -m serial.tools.miniterm $SerialPort $Baud"
     }
 }
