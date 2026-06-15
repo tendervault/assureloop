@@ -1376,6 +1376,13 @@ class ReleaseToolsTest(unittest.TestCase):
                 "Evidence bundle verification",
                 "GitHub Actions",
             ],
+            "docs/assureloop-dev-domain-setup.md": [
+                "assureloop.dev",
+                "GitHub Pages",
+                "185.199.108.153",
+                "tendervault.github.io",
+                "Enforce HTTPS",
+            ],
         }
 
         for relative_path, expected_text in required_docs.items():
@@ -1384,6 +1391,61 @@ class ReleaseToolsTest(unittest.TestCase):
             contents = path.read_text(encoding="utf-8")
             for text in expected_text:
                 self.assertIn(text, contents, relative_path)
+
+    def test_public_landing_page_is_present(self) -> None:
+        index = REPO_ROOT / "site/index.html"
+        styles = REPO_ROOT / "site/styles.css"
+        site_readme = REPO_ROOT / "site/README.md"
+        cname = REPO_ROOT / "site/CNAME"
+        pages_workflow = REPO_ROOT / ".github/workflows/pages.yml"
+        domain_setup = REPO_ROOT / "docs/assureloop-dev-domain-setup.md"
+
+        for path in (index, styles, site_readme, cname, pages_workflow, domain_setup):
+            self.assertTrue(path.is_file(), str(path.relative_to(REPO_ROOT)))
+
+        html = index.read_text(encoding="utf-8")
+        for text in [
+            "Release assurance for embedded firmware",
+            "https://github.com/tendervault/assureloop",
+            "https://github.com/tendervault/assureloop/releases/tag/v0.3.0-hardware-alpha",
+            "ST NUCLEO-H563ZI",
+            "nucleo_h563zi",
+            "Zephyr build",
+            "signed image",
+            "SBOM",
+            "release manifest",
+            "evidence bundle",
+            "update package",
+            "MCUboot validation",
+            "Not production OTA",
+            "Not production secure boot",
+            "Not certified safety or cybersecurity compliance",
+        ]:
+            self.assertIn(text, html)
+        self.assertNotIn("<script", html.lower())
+
+        self.assertEqual(cname.read_text(encoding="utf-8").strip(), "assureloop.dev")
+
+        workflow = pages_workflow.read_text(encoding="utf-8")
+        for text in [
+            "actions/configure-pages@v5",
+            "actions/upload-pages-artifact@v3",
+            "actions/deploy-pages@v4",
+            "pages: write",
+            "id-token: write",
+            "path: site",
+        ]:
+            self.assertIn(text, workflow)
+
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("[https://assureloop.dev](https://assureloop.dev/)", readme)
+        self.assertIn("v0.3.0 hardware-alpha", readme)
+
+        project_status = (REPO_ROOT / "docs/project-status.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("AL-019", project_status)
+        self.assertIn("assureloop.dev", project_status)
 
     def test_full_demo_scripts_reference_required_flow(self) -> None:
         required_steps = [

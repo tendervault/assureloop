@@ -7,6 +7,11 @@ firmware. It helps developers build a simulator firmware image, generate an
 SBOM, create a release manifest, sign and verify evidence, package an update,
 and exercise a local OTA lifecycle simulator before moving to physical hardware.
 
+## Website
+
+- Website: [https://assureloop.dev](https://assureloop.dev/)
+- GitHub release: [v0.3.0 hardware-alpha](https://github.com/tendervault/assureloop/releases/tag/v0.3.0-hardware-alpha)
+
 ## What AssureLoop Is / Is Not
 
 AssureLoop is:
@@ -162,6 +167,7 @@ Clean generated output on Windows:
 - [ST NUCLEO-H563ZI MCUboot update lifecycle](docs/nucleo-h563zi-mcuboot-update-lifecycle.md)
 - [v0.3 hardware-alpha release readiness](docs/v0.3-hardware-alpha-release.md)
 - [v0.3 hardware-alpha release notes](docs/releases/v0.3-hardware-alpha.md)
+- [assureloop.dev domain setup](docs/assureloop-dev-domain-setup.md)
 - [Contributor quickstart](docs/contributor-quickstart.md)
 - [Release checklist](docs/release-checklist.md)
 - [Architecture](docs/architecture.md)
@@ -190,6 +196,7 @@ evidence/                  Starter requirements, tests, and security checklist e
 schemas/                   Release manifest JSON Schema
 samples/logs/              Sample controller/QEMU logs for trace reports
 docs/                      Project status, architecture, quickstart, and release docs
+site/                      Static public landing page for assureloop.dev
 tests/                     Host-side unit tests
 .github/workflows/         CI workflow
 west.yml                   Zephyr workspace manifest pinned to Zephyr v4.4.0

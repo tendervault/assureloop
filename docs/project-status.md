@@ -5,7 +5,9 @@
 AssureLoop is open-source release assurance tooling for Zephyr-based embedded
 firmware. The current alpha workflow can build a simulator firmware demo,
 generate release evidence, verify artifacts, package a simulator update, and
-exercise a local OTA lifecycle state machine.
+exercise a local OTA lifecycle state machine. The project also has a static
+public landing page for `assureloop.dev` that links developers to the GitHub
+repository, v0.3 hardware-alpha release, docs, and sample artifacts.
 
 The project is simulator-first. The reference firmware target is
 `qemu_cortex_m3`, and the current signed-image path creates an
@@ -36,6 +38,8 @@ MCUboot-compatible signed application image for development verification.
 - Prepares local v0.3 hardware-alpha release output under ignored `dist/`
   paths with release notes, sample logs, sample development evidence, update
   package output, verification summaries, and checksums.
+- Publishes a static public landing page from `site/` for `assureloop.dev`
+  through GitHub Pages, with explicit non-production limitations.
 - Packages simulator update payloads and verifies downgrade, target, and tamper
   checks.
 - Simulates local OTA lifecycle states: staged, installed, confirmed, rollback,
@@ -111,11 +115,14 @@ must not be reused for production releases.
 | AL-016B | Done | Controlled NUCLEO-H563ZI MCUboot lifecycle fixture distinguishes baseline/update images, validates the staged secondary image before requesting upgrade, proves staged swap, confirm persistence, and unconfirmed rollback with real serial evidence, and prevents repeated baseline requests with a storage-partition one-shot marker. |
 | AL-017 | Done | Hardware negative-update validation proves MCUboot rejects a tampered secondary image and a lower-version secondary image on ST NUCLEO-H563ZI; v0.3 hardware-alpha release readiness is documented. |
 | AL-018 | Done | v0.3 hardware-alpha release notes and local release preparation scripts assemble safe sample/dev release materials, verification summaries, and checksums under ignored `dist/releases/v0.3-hardware-alpha/`. |
+| AL-019 | Done | Public static landing page for `assureloop.dev` documents AssureLoop's release-assurance scope, v0.3 hardware-alpha proof points, supported ST NUCLEO-H563ZI board, resource links, domain setup, and non-production limitations. |
 
 ## Next Planned Milestones
 
 - Decide whether mcumgr/SMP should become the next local update transport
   milestone after v0.3 hardware-alpha release preparation.
+- Keep the public site aligned with future alpha release notes and hardware
+  evidence without adding backend services or analytics.
 - Improve evidence quality and reviewer-facing evidence bundle content.
 - Define a production signing threat model and key custody policy before any
   production signing claims.

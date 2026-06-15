@@ -1,0 +1,245 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="AssureLoop is open-source release assurance tooling for secure, auditable embedded firmware."
+    >
+    <title>AssureLoop | Release assurance for embedded firmware</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="AssureLoop home">
+        <span class="brand-mark" aria-hidden="true">AL</span>
+        <span>AssureLoop</span>
+      </a>
+      <nav class="nav" aria-label="Primary navigation">
+        <a href="#proof">v0.3 proof</a>
+        <a href="#flow">Flow</a>
+        <a href="#start">Get started</a>
+        <a href="https://github.com/tendervault/assureloop">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Open-source firmware release assurance</p>
+          <h1 id="hero-title">Release assurance for embedded firmware</h1>
+          <p class="hero-lede">
+            AssureLoop helps Zephyr firmware teams produce auditable release
+            evidence: signed images, SBOMs, manifests, trace reports, evidence
+            bundles, update packages, and simulator-first lifecycle checks.
+          </p>
+          <div class="actions" aria-label="Primary links">
+            <a class="button primary" href="https://github.com/tendervault/assureloop">
+              View GitHub repo
+            </a>
+            <a
+              class="button"
+              href="https://github.com/tendervault/assureloop/releases/tag/v0.3.0-hardware-alpha"
+            >
+              v0.3 hardware-alpha
+            </a>
+          </div>
+        </div>
+
+        <div class="hero-panel" aria-label="AssureLoop release evidence snapshot">
+          <div class="panel-topline">
+            <span>release evidence</span>
+            <span>nucleo_h563zi</span>
+          </div>
+          <div class="evidence-grid" aria-hidden="true">
+            <span>zephyr.signed.bin</span>
+            <strong>verified</strong>
+            <span>sbom/*.spdx</span>
+            <strong>included</strong>
+            <span>release-manifest.json</span>
+            <strong>schema ok</strong>
+            <span>evidence-bundle.tar.gz</span>
+            <strong>hash ok</strong>
+          </div>
+          <p>
+            v0.3 proves a hardware-alpha path on ST NUCLEO-H563ZI with
+            development keys and direct-flash MCUboot validation.
+          </p>
+        </div>
+      </section>
+
+      <section class="section two-column" id="what" aria-labelledby="what-title">
+        <div>
+          <p class="eyebrow">What it is</p>
+          <h2 id="what-title">A release evidence loop for embedded teams</h2>
+        </div>
+        <div class="content-stack">
+          <p>
+            AssureLoop is for embedded firmware developers, founders,
+            maintainers, and reviewers who need a credible record of what was
+            built, what it contains, how it was signed, and how update packages
+            are checked before hardware deployment.
+          </p>
+          <ul class="plain-list">
+            <li>Build Zephyr firmware and collect real build artifacts.</li>
+            <li>Generate SBOM, manifest, trace report, and evidence bundle.</li>
+            <li>Verify manifests, bundle contents, update payloads, and hashes.</li>
+            <li>Exercise simulator-first lifecycle behavior before real OTA.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="proof" aria-labelledby="proof-title">
+        <div class="section-heading">
+          <p class="eyebrow">v0.3 hardware-alpha</p>
+          <h2 id="proof-title">What v0.3 proves</h2>
+          <p>
+            The current public hardware-alpha validates one board and one local
+            development workflow. It is narrow on purpose.
+          </p>
+        </div>
+        <div class="proof-grid">
+          <article>
+            <h3>Signed image evidence</h3>
+            <p>
+              Board-specific signed image artifacts are packaged with SBOM,
+              manifest hashes, trace data, and evidence bundle verification.
+            </p>
+          </article>
+          <article>
+            <h3>MCUboot boot path</h3>
+            <p>
+              ST NUCLEO-H563ZI boots the AssureLoop demo through MCUboot using
+              local development signing keys.
+            </p>
+          </article>
+          <article>
+            <h3>Update lifecycle checks</h3>
+            <p>
+              Confirmed update, rollback, tampered update rejection, and
+              lower-version update rejection are documented with sample logs.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="flow" aria-labelledby="flow-title">
+        <div class="section-heading">
+          <p class="eyebrow">Release assurance flow</p>
+          <h2 id="flow-title">From build output to verified package</h2>
+        </div>
+        <ol class="flow" aria-label="Release assurance flow">
+          <li>Zephyr build</li>
+          <li>signed image</li>
+          <li>SBOM</li>
+          <li>release manifest</li>
+          <li>evidence bundle</li>
+          <li>update package</li>
+          <li>MCUboot validation</li>
+        </ol>
+      </section>
+
+      <section class="section split" id="hardware" aria-labelledby="hardware-title">
+        <div>
+          <p class="eyebrow">Supported hardware-alpha board</p>
+          <h2 id="hardware-title">ST NUCLEO-H563ZI</h2>
+          <p>
+            v0.3 hardware evidence is scoped to the ST NUCLEO-H563ZI using the
+            Zephyr target <code>nucleo_h563zi</code>. Broad board support is not
+            claimed yet.
+          </p>
+        </div>
+        <div class="board-card">
+          <dl>
+            <div>
+              <dt>Board</dt>
+              <dd>ST NUCLEO-H563ZI</dd>
+            </div>
+            <div>
+              <dt>Target</dt>
+              <dd><code>nucleo_h563zi</code></dd>
+            </div>
+            <div>
+              <dt>Boot path</dt>
+              <dd>MCUboot plus signed app</dd>
+            </div>
+            <div>
+              <dt>Evidence</dt>
+              <dd>Sample/dev artifacts</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="section caution" aria-labelledby="not-title">
+        <div>
+          <p class="eyebrow">Scope boundaries</p>
+          <h2 id="not-title">What AssureLoop is not</h2>
+        </div>
+        <ul class="plain-list">
+          <li>Not a new operating system.</li>
+          <li>Not production OTA.</li>
+          <li>Not production secure boot.</li>
+          <li>Not certified safety or cybersecurity compliance.</li>
+          <li>Not a cloud update service or device fleet manager.</li>
+        </ul>
+      </section>
+
+      <section class="section" id="start" aria-labelledby="start-title">
+        <div class="section-heading">
+          <p class="eyebrow">Get started</p>
+          <h2 id="start-title">Run the workflow locally</h2>
+          <p>
+            Clone the repository, follow the contributor quickstart, and run the
+            simulator-first demo before touching hardware.
+          </p>
+        </div>
+        <div class="command-grid">
+          <div>
+            <h3>Host tests</h3>
+            <pre><code>.\scripts\test-tools.ps1</code></pre>
+          </div>
+          <div>
+            <h3>Full simulator demo</h3>
+            <pre><code>.\scripts\full-demo.ps1 -Python py</code></pre>
+          </div>
+          <div>
+            <h3>Hardware-alpha release prep</h3>
+            <pre><code>.\scripts\prepare-v0.3-release.ps1 -Python py</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section resources" aria-labelledby="resources-title">
+        <div class="section-heading">
+          <p class="eyebrow">Links and resources</p>
+          <h2 id="resources-title">Follow the evidence</h2>
+        </div>
+        <div class="resource-list">
+          <a href="https://github.com/tendervault/assureloop">GitHub repository</a>
+          <a href="https://github.com/tendervault/assureloop/releases/tag/v0.3.0-hardware-alpha">
+            v0.3.0 hardware-alpha release
+          </a>
+          <a href="https://github.com/tendervault/assureloop/blob/main/docs/releases/v0.3-hardware-alpha.md">
+            Release notes
+          </a>
+          <a href="https://github.com/tendervault/assureloop/tree/main/docs">
+            Project documentation
+          </a>
+          <a href="https://github.com/tendervault/assureloop/releases/tag/v0.3.0-hardware-alpha">
+            Sample artifacts release
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        AssureLoop is Apache-2.0 open-source release assurance tooling for
+        embedded firmware.
+      </p>
+    </footer>
+  </body>
+</html>
