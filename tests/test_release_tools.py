@@ -1420,9 +1420,25 @@ class ReleaseToolsTest(unittest.TestCase):
             "Not production OTA",
             "Not production secure boot",
             "Not certified safety or cybersecurity compliance",
+            "© 2026 AssureLoop",
+            "Apache-2.0 license",
+            "Hardware-alpha only: not production OTA",
+            "not production secure boot",
+            "not certified safety or cybersecurity compliance",
         ]:
             self.assertIn(text, html)
         self.assertNotIn("<script", html.lower())
+
+        footer = html[html.index('<footer class="site-footer">') :]
+        for text in [
+            "© 2026 AssureLoop",
+            "Apache-2.0 license",
+            "https://github.com/tendervault/assureloop",
+            "Hardware-alpha only: not production OTA",
+            "not production secure boot",
+            "not certified safety or cybersecurity compliance",
+        ]:
+            self.assertIn(text, footer)
 
         self.assertEqual(cname.read_text(encoding="utf-8").strip(), "assureloop.dev")
 

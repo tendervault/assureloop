@@ -411,6 +411,23 @@ pre {
   color: var(--muted);
 }
 
+.footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  font-weight: 800;
+}
+
+.footer-meta a {
+  color: var(--accent-strong);
+}
+
+.site-footer p {
+  max-width: 760px;
+  margin: 12px 0 0;
+}
+
 @media (max-width: 920px) {
   .site-header {
     align-items: flex-start;
