@@ -1255,7 +1255,7 @@ class ReleaseToolsTest(unittest.TestCase):
     def test_public_alpha_docs_are_present(self) -> None:
         required_docs = {
             "docs/project-status.md": [
-                "AL-012",
+                "AL-013",
                 "simulator-first",
                 "not production-ready",
             ],
@@ -1265,6 +1265,13 @@ class ReleaseToolsTest(unittest.TestCase):
                 "Backup board",
                 "Board-Readiness Checklist",
                 "AL-013",
+            ],
+            "docs/nucleo-h563zi-bringup.md": [
+                "nucleo_h563zi",
+                "build-nucleo-h563zi",
+                "COM4",
+                "STM32CubeProgrammer",
+                "AssureLoop controller demo booting",
             ],
             "docs/release-assurance-flow.md": [
                 "Zephyr build",
@@ -1313,39 +1320,81 @@ class ReleaseToolsTest(unittest.TestCase):
         self.assertIn("test-tools", powershell_contents)
         self.assertIn("unittest discover", bash_contents)
 
+    def test_nucleo_h563zi_hardware_scripts_and_docs_are_present(self) -> None:
+        docs = (REPO_ROOT / "docs/nucleo-h563zi-bringup.md").read_text(encoding="utf-8")
+        for text in [
+            "top ST-LINK USB-C port",
+            "CMake",
+            "Ninja",
+            "7-Zip",
+            "pyserial",
+            "D:\\zephyr-sdk",
+            "py -m west build -p always -b nucleo_h563zi firmware/app -d build-nucleo-h563zi",
+            "py -m west flash -d build-nucleo-h563zi",
+            "py -m serial.tools.miniterm COM4 115200",
+            "loop iteration=20",
+            "loop_summary iterations=20",
+        ]:
+            self.assertIn(text, docs)
+
+        scripts = {
+            "scripts/hardware-build-nucleo-h563zi.ps1": ["-Flash", "west was not found"],
+            "scripts/hardware-build-nucleo-h563zi.sh": ["--flash", "west was not found"],
+        }
+        for relative_path, expected_text in scripts.items():
+            path = REPO_ROOT / relative_path
+            self.assertTrue(path.is_file(), relative_path)
+            contents = path.read_text(encoding="utf-8")
+            for text in [
+                "nucleo_h563zi",
+                "build-nucleo-h563zi",
+                "firmware/app",
+                "CMake was not found",
+                "Ninja was not found",
+            ] + expected_text:
+                self.assertIn(text, contents, relative_path)
+
     def test_full_demo_bash_script_has_valid_syntax(self) -> None:
         bash = self._bash()
         if bash is None:
             self.skipTest("bash is not available")
 
-        result = subprocess.run(
-            [bash, "-n", str(REPO_ROOT / "scripts/full-demo.sh")],
-            cwd=REPO_ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        for relative_path in (
+            "scripts/full-demo.sh",
+            "scripts/hardware-build-nucleo-h563zi.sh",
+        ):
+            result = subprocess.run(
+                [bash, "-n", str(REPO_ROOT / relative_path)],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_full_demo_powershell_script_has_valid_syntax(self) -> None:
         powershell = self._powershell()
         if powershell is None:
             self.skipTest("PowerShell is not available")
 
-        script = REPO_ROOT / "scripts/full-demo.ps1"
-        command = (
-            "$errors = $null; "
-            f"$null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw '{script}'), [ref]$errors); "
-            "if ($errors) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }"
-        )
-        result = subprocess.run(
-            [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-            cwd=REPO_ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        for relative_path in (
+            "scripts/full-demo.ps1",
+            "scripts/hardware-build-nucleo-h563zi.ps1",
+        ):
+            script = REPO_ROOT / relative_path
+            command = (
+                "$errors = $null; "
+                f"$null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw '{script}'), [ref]$errors); "
+                "if ($errors) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }"
+            )
+            result = subprocess.run(
+                [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_issue_templates_include_public_alpha_paths(self) -> None:
         templates = {

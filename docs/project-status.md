@@ -46,6 +46,10 @@ These pieces are intentionally simulator-first:
 The simulator path is meant to prove release mechanics before physical board
 support is added.
 
+The first physical validation target is ST NUCLEO-H563ZI. AL-013 manually
+validated build, flash, and COM4 serial logging for that board, but broad
+hardware support and hardware-backed update/rollback remain future work.
+
 ## Not Production-Ready Yet
 
 AssureLoop is not production-ready. In particular, it is not:
@@ -54,7 +58,7 @@ AssureLoop is not production-ready. In particular, it is not:
 - a production secure boot implementation,
 - a production OTA transport,
 - a cloud update service,
-- a hardware board port,
+- broad hardware board support,
 - a safety certification package,
 - a cybersecurity certification claim,
 - a production signing-key custody model.
@@ -79,10 +83,10 @@ must not be reused for production releases.
 | AL-010 | Done | Local OTA simulator models stage, install, confirm, rollback, and rejection states. |
 | AL-011 | Done | Public alpha docs, full-demo wrappers, contributor quickstart, release checklist, and issue templates make the project easier to evaluate. |
 | AL-012 | Done | First hardware target selection recommends ST NUCLEO-H563ZI, names nRF52840 DK as backup, and defines board-readiness milestones. |
+| AL-013 | Done | ST NUCLEO-H563ZI manually builds, flashes, starts successfully, and emits the expected COM4 controller logs. |
 
 ## Next Planned Milestones
 
-- AL-013: bring up ST NUCLEO-H563ZI with basic Zephyr logging.
 - AL-014: generate signed image evidence for ST NUCLEO-H563ZI.
 - AL-015: verify MCUboot boot behavior on ST NUCLEO-H563ZI.
 - AL-016: demonstrate local update and rollback behavior on ST NUCLEO-H563ZI
